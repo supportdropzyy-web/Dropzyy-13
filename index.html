@@ -348,11 +348,19 @@
         </div>
 
         <!-- Supplier Products List -->
-        <div class="supplier-products-list-header">
+        <div class="supplier-products-list-header" style="flex-wrap: wrap; gap: 8px;">
             <h3>Uploaded Kirana Products</h3>
-            <button class="btn btn-primary btn-sm" id="supplierAddNewBtn">
-                <i class="fa-solid fa-plus"></i> Add New Product
-            </button>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="openSupplierAnalyticsModal()">
+                    <i class="fa-solid fa-chart-pie text-primary"></i> Analytics Dashboard 📊
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="openAdminCategoriesModal()">
+                    <i class="fa-solid fa-folder-plus text-primary"></i> Categories 🏷️
+                </button>
+                <button class="btn btn-primary btn-sm" id="supplierAddNewBtn">
+                    <i class="fa-solid fa-plus"></i> Add New Product
+                </button>
+            </div>
         </div>
 
         <div class="supplier-products-container" id="supplierProductsContainer">
@@ -1261,6 +1269,144 @@
                             </tr>
                         </thead>
                         <tbody id="analyticsCityTableBody">
+                            <!-- Rendered dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Full-Screen Supplier Data Analytics Modal -->
+    <div class="modal-overlay" id="supplierAnalyticsOverlay"></div>
+    <div class="supplier-dashboard-modal" id="supplierAnalyticsModal" style="max-width: 96vw; width: 96vw; max-height: 94vh; height: 94vh; padding: 20px; border-radius: 20px;">
+        <div class="modal-header" style="border-bottom: 1px solid #E2E8F0; padding-bottom: 12px; margin-bottom: 14px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; flex-wrap: wrap; gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(135deg, #0284C7, #0369A1); color: #FFF; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; box-shadow: 0 4px 12px rgba(2,132,199,0.3);">
+                        <i class="fa-solid fa-chart-line"></i>
+                    </div>
+                    <div>
+                        <h2 style="margin: 0; font-size: 1.25rem; color: #0F172A; display: flex; align-items: center; gap: 8px;">
+                            Supplier Analytics Dashboard
+                            <span class="badge" style="background: #0284C7; color: #FFF; font-size: 0.72rem; padding: 2px 8px; border-radius: 12px;">CATALOG METRICS</span>
+                        </h2>
+                        <span style="font-size: 0.8rem; color: #64748B;">
+                            Order performance, total sales, product breakdown & online vs offline channels. 
+                            <strong style="color: #047857;"><i class="fa-solid fa-shield-halved"></i> Privacy Protected (No customer details)</strong>
+                        </span>
+                    </div>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <button class="btn btn-secondary btn-sm" onclick="refreshSupplierAnalyticsCharts()" title="Refresh Data">
+                        <i class="fa-solid fa-rotate-right"></i> Refresh Data
+                    </button>
+                    <button class="btn btn-secondary btn-sm" onclick="toggleFullScreenSupplierAnalytics()" id="fullScreenSupplierToggleBtn" title="Toggle Full Screen Mode">
+                        <i class="fa-solid fa-expand"></i> Full Screen
+                    </button>
+                    <button class="close-modal-btn" onclick="closeSupplierAnalyticsModal()" style="position: static;"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-body" style="height: calc(100% - 70px); overflow-y: auto; padding-right: 4px;">
+            <!-- KPI Cards Grid -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 20px;">
+                <div style="background: linear-gradient(135deg, #F0FDF4, #DCFCE7); border: 1px solid #A7F3D0; padding: 16px; border-radius: 14px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                        <span style="font-size: 0.8rem; font-weight: 700; color: #047857;">YOUR SALES REVENUE</span>
+                        <i class="fa-solid fa-indian-rupee-sign" style="color: #059669; font-size: 1.1rem;"></i>
+                    </div>
+                    <div id="supplierStatRevenue" style="font-size: 1.5rem; font-weight: 800; color: #065F46;">₹0.00</div>
+                    <span style="font-size: 0.72rem; color: #047857; font-weight: 600;"><i class="fa-solid fa-truck-field"></i> Catalog Total Payout</span>
+                </div>
+
+                <div style="background: linear-gradient(135deg, #EFF6FF, #DBEAFE); border: 1px solid #BFDBFE; padding: 16px; border-radius: 14px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                        <span style="font-size: 0.8rem; font-weight: 700; color: #1E40AF;">YOUR ORDERS</span>
+                        <i class="fa-solid fa-bag-shopping" style="color: #2563EB; font-size: 1.1rem;"></i>
+                    </div>
+                    <div id="supplierStatTotalOrders" style="font-size: 1.5rem; font-weight: 800; color: #1E3A8A;">0 Orders</div>
+                    <span id="supplierStatCompletedOrders" style="font-size: 0.72rem; color: #1D4ED8; font-weight: 600;">0 Completed</span>
+                </div>
+
+                <div style="background: linear-gradient(135deg, #FFFBEB, #FEF3C7); border: 1px solid #FDE68A; padding: 16px; border-radius: 14px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                        <span style="font-size: 0.8rem; font-weight: 700; color: #92400E;">CANCELLED ORDERS</span>
+                        <i class="fa-solid fa-ban" style="color: #D97706; font-size: 1.1rem;"></i>
+                    </div>
+                    <div id="supplierStatCancelledOrders" style="font-size: 1.5rem; font-weight: 800; color: #78350F;">0 Cancelled</div>
+                    <span style="font-size: 0.72rem; color: #B45309; font-weight: 600;">Fulfillment Ratio</span>
+                </div>
+
+                <div style="background: linear-gradient(135deg, #F3E8FF, #E9D5FF); border: 1px solid #DDD6FE; padding: 16px; border-radius: 14px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                        <span style="font-size: 0.8rem; font-weight: 700; color: #6B21A8;">ONLINE VS OFFLINE</span>
+                        <i class="fa-solid fa-globe" style="color: #9333EA; font-size: 1.1rem;"></i>
+                    </div>
+                    <div id="supplierStatChannels" style="font-size: 1.15rem; font-weight: 800; color: #581C87;">0 Online / 0 Offline</div>
+                    <span style="font-size: 0.72rem; color: #7E22CE; font-weight: 600;">Sales Channel Split</span>
+                </div>
+            </div>
+
+            <!-- Charts Grid -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; margin-bottom: 20px;">
+                <!-- Chart 1: Order Status Breakdown -->
+                <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                        <h4 style="margin: 0; font-size: 0.95rem; color: #0F172A; display: flex; align-items: center; gap: 6px;">
+                            <i class="fa-solid fa-chart-pie text-primary"></i> Order Status Breakdown
+                        </h4>
+                        <span style="font-size: 0.75rem; color: #64748B;">Fulfillment</span>
+                    </div>
+                    <div style="height: 240px; position: relative;">
+                        <canvas id="supplierStatusChartCanvas"></canvas>
+                    </div>
+                </div>
+
+                <!-- Chart 2: Online vs Offline Channels -->
+                <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                        <h4 style="margin: 0; font-size: 0.95rem; color: #0F172A; display: flex; align-items: center; gap: 6px;">
+                            <i class="fa-solid fa-shop text-primary"></i> Online vs Offline Order Modes
+                        </h4>
+                        <span style="font-size: 0.75rem; color: #64748B;">Sales Channel</span>
+                    </div>
+                    <div style="height: 240px; position: relative;">
+                        <canvas id="supplierChannelChartCanvas"></canvas>
+                    </div>
+                </div>
+
+                <!-- Chart 3: Top Products Sold -->
+                <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                        <h4 style="margin: 0; font-size: 0.95rem; color: #0F172A; display: flex; align-items: center; gap: 6px;">
+                            <i class="fa-solid fa-boxes-stacked text-primary"></i> Product-Wise Orders & Sales
+                        </h4>
+                        <span style="font-size: 0.75rem; color: #64748B;">Top Catalog Items</span>
+                    </div>
+                    <div style="height: 240px; position: relative;">
+                        <canvas id="supplierProductChartCanvas"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Product Breakdown Table -->
+            <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 16px; margin-bottom: 16px;">
+                <h4 style="margin: 0 0 12px 0; font-size: 0.95rem; color: #0F172A;"><i class="fa-solid fa-table-list text-primary"></i> Product-Wise Sales & Performance Table</h4>
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: left;">
+                        <thead>
+                            <tr style="background: #F8FAFC; border-bottom: 2px solid #E2E8F0;">
+                                <th style="padding: 10px; color: #475569;">Product Title</th>
+                                <th style="padding: 10px; color: #475569;">Category</th>
+                                <th style="padding: 10px; color: #475569;">Units Sold</th>
+                                <th style="padding: 10px; color: #475569;">Completed Orders</th>
+                                <th style="padding: 10px; color: #475569;">Total Sales Revenue</th>
+                            </tr>
+                        </thead>
+                        <tbody id="supplierProductTableBody">
                             <!-- Rendered dynamically -->
                         </tbody>
                     </table>
