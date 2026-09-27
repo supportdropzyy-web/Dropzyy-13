@@ -373,14 +373,13 @@ const DEFAULT_REGISTERED_USERS = [
     { id: 3, username: 'supplier', email: 'supplier@freshkart.com', password: 'supplier123', full_name: 'Desi Kirana Wholesaler', supplier_company_name: 'Ramesh Kirana Wholesale Co.', role: 'supplier' }
 ];
 
-let registeredUsers = DEFAULT_REGISTERED_USERS;
-// Ensure default admin & superadmin accounts are always present in registeredUsers
+let registeredUsers = JSON.parse(localStorage.getItem('dropzyy_registered_users')) || [...DEFAULT_REGISTERED_USERS];
 DEFAULT_REGISTERED_USERS.forEach(defaultUser => {
     if (!registeredUsers.some(u => u.username.toLowerCase() === defaultUser.username.toLowerCase())) {
         registeredUsers.unshift(defaultUser);
     }
 });
-// Registered accounts persisted in SQLite
+localStorage.setItem('dropzyy_registered_users', JSON.stringify(registeredUsers));
 
 const DEFAULT_COUPONS = [
     { id: 'c1', code: 'KIRANA10', discount: 10, target: 'everyone', targetUser: '' },
@@ -566,7 +565,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         fetchProductsFromAPI(),
         fetchCouponsFromAPI(),
         fetchLocationsFromAPI(),
-        fetchCategoriesFromAPI()
+        fetchCategoriesFromAPI(),
+        syncUsersWithAPI()
     ]);
     renderCategories();
     renderProducts();
@@ -1817,17 +1817,8 @@ window.logoutUser = function() {
 };
 
 // 10. ADMINISTRATIVE CONTROL CENTER
-window.openAdminControlCenter = async function() {
-    if (!state.currentUser || (state.currentUser.role !== 'admin' && state.currentUser.role !== 'sub_admin')) return;
 
-    closeModals();
-
-    const overlay = document.getElementById('adminControlOverlay');
-    const modal = document.getElementById('adminControlModal');
-    if (overlay) overlay.classList.add('active');
-    if (modal) modal.classList.add('active');
-
-    // Render registered users directory immediately from local storage
+function renderAdminUsersDirectory() {
     const usersList = [...registeredUsers];
     const suppliersCount = usersList.filter(u => u.role === 'supplier').length;
     const statUsers = document.getElementById('statAdminTotalUsers');
@@ -1857,7 +1848,7 @@ window.openAdminControlCenter = async function() {
                     <button type="button" class="btn btn-secondary btn-sm" onclick="adminEditUserAddress('${u.username}')" style="color: #0284C7;" title="Edit Address & User Details">
                         <i class="fa-solid fa-user-pen"></i> Edit
                     </button>
-                    ${(u.username !== 'yashpatil' && u.username !== state.currentUser.username) ? `
+                    ${(u.username !== 'yashpatil' && state.currentUser && u.username !== state.currentUser.username) ? `
                         <button type="button" class="btn btn-secondary btn-sm text-danger" onclick="deleteUserAccount(${u.id || 0}, '${u.username}')" title="Delete User Account">
                             <i class="fa-solid fa-trash"></i>
                         </button>
@@ -1866,22 +1857,48 @@ window.openAdminControlCenter = async function() {
             </div>
         `).join('');
     }
+}
 
-    // Async sync with API server if running
+async function syncUsersWithAPI() {
     try {
-        const response = await fetchWithTimeout(`${API_BASE_URL}/admin/users`, {}, 1200);
+        const response = await fetchWithTimeout(`${API_BASE_URL}/admin/users`, {}, 15000);
         if (response && response.ok) {
             const data = await response.json();
-            if (data && data.length > 0) {
+            if (Array.isArray(data) && data.length > 0) {
                 data.forEach(u => {
-                    if (!registeredUsers.some(ul => ul.username.toLowerCase() === u.username.toLowerCase())) {
-                        registeredUsers.push(u);
+                    const existingIdx = registeredUsers.findIndex(ul => ul.username.toLowerCase() === u.username.toLowerCase());
+                    if (existingIdx === -1) {
+                        registeredUsers.push({
+                            id: u.id,
+                            username: u.username,
+                            email: u.email,
+                            password: u.password || 'supplier123',
+                            full_name: u.full_name,
+                            role: u.role,
+                            supplier_company_name: u.supplier_company_name,
+                            phone: u.phone
+                        });
+                    } else {
+                        registeredUsers[existingIdx].id = u.id;
+                        registeredUsers[existingIdx].full_name = u.full_name || registeredUsers[existingIdx].full_name;
+                        registeredUsers[existingIdx].supplier_company_name = u.supplier_company_name || registeredUsers[existingIdx].supplier_company_name;
+                        registeredUsers[existingIdx].role = u.role || registeredUsers[existingIdx].role;
                     }
                 });
-                // Registered accounts persisted in SQLite
+                localStorage.setItem('dropzyy_registered_users', JSON.stringify(registeredUsers));
+                renderAdminUsersDirectory();
             }
         }
     } catch (e) {}
+}
+
+window.openAdminControlCenter = async function() {
+    closeModals();
+    if (adminControlOverlay) adminControlOverlay.classList.add('active');
+    if (adminControlModal) adminControlModal.classList.add('active');
+
+    renderAdminUsersDirectory();
+    syncUsersWithAPI();
 };
 
 async function deleteUserAccount(userId, username) {
@@ -1894,7 +1911,7 @@ async function deleteUserAccount(userId, username) {
     }
 
     registeredUsers = registeredUsers.filter(u => u.username !== username);
-    // Registered accounts persisted in SQLite
+    localStorage.setItem('dropzyy_registered_users', JSON.stringify(registeredUsers));
 
     showToast(`User account @${username} deleted`, 'info');
     openAdminControlCenter();
@@ -1955,7 +1972,7 @@ window.handleAdminSaveUserSubmit = function(e) {
             city,
             pincode
         };
-        // Registered accounts persisted in SQLite
+        localStorage.setItem('dropzyy_registered_users', JSON.stringify(registeredUsers));
 
         if (state.currentUser && state.currentUser.username.toLowerCase() === username.toLowerCase()) {
             state.currentUser.full_name = fullName;
@@ -1978,9 +1995,13 @@ async function createAccountByAdmin(username, password, fullName, role, supplier
         return;
     }
 
+    const cleanUser = username.trim().toLowerCase().replace(/\s+/g, '_');
+    const email = `${cleanUser}@freshkart.com`;
+
     const newUser = {
         id: Date.now(),
-        username: username,
+        username: cleanUser,
+        email: email,
         password: password,
         full_name: fullName,
         role: role,
@@ -1988,10 +2009,10 @@ async function createAccountByAdmin(username, password, fullName, role, supplier
     };
 
     registeredUsers.push(newUser);
-    // Registered accounts persisted in SQLite
+    localStorage.setItem('dropzyy_registered_users', JSON.stringify(registeredUsers));
 
     closeModals();
-    showToast(`Created <strong>${role.toUpperCase()}</strong> account for @${username}!`, 'success');
+    showToast(`Created <strong>${role.toUpperCase()}</strong> account for @${cleanUser}!`, 'success');
     openAdminControlCenter();
 
     try {
@@ -1999,15 +2020,28 @@ async function createAccountByAdmin(username, password, fullName, role, supplier
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
-                username, password, full_name: fullName, role, supplier_company_name: supplierCompany 
+                username: cleanUser, 
+                email, 
+                password, 
+                full_name: fullName, 
+                role, 
+                supplier_company_name: supplierCompany 
             })
-        }, 1500);
+        }, 15000);
 
         if (response && response.ok) {
             const user = await response.json();
-            if (user && user.id) newUser.id = user.id;
+            if (user && user.id) {
+                newUser.id = user.id;
+                localStorage.setItem('dropzyy_registered_users', JSON.stringify(registeredUsers));
+            }
+            showToast(`Supplier account @${cleanUser} synced to server database!`, 'success');
+        } else {
+            console.warn('API Registration Response Warning:', response.status);
         }
-    } catch (e) {}
+    } catch (e) {
+        console.warn('API Registration Warning:', e);
+    }
 }
 
 // 10. SUPPLIER DASHBOARD
