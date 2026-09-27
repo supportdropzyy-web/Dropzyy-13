@@ -3659,6 +3659,15 @@ function renderBookingTracking(searchQuery = '') {
 
     const isAdminOrSupplier = state.currentUser && (state.currentUser.role === 'admin' || state.currentUser.role === 'supplier' || state.currentUser.role === 'sub_admin');
 
+    const toggleSoundAlertBtn = document.getElementById('toggleSoundAlertBtn');
+    if (toggleSoundAlertBtn) {
+        if (isAdminOrSupplier) {
+            toggleSoundAlertBtn.classList.remove('hidden');
+        } else {
+            toggleSoundAlertBtn.classList.add('hidden');
+        }
+    }
+
     bookingTrackingContainer.innerHTML = bookingsToDisplay.map(order => `
         <div class="order-card" style="${order.status === 'Cancelled' ? 'border: 2px solid #FCA5A5; background: #FFF5F5;' : ''}">
             <div class="order-header" style="background-color: ${order.status === 'Cancelled' ? '#FEE2E2' : 'var(--bg-light)'}; padding: 1rem; margin: -1.5rem -1.5rem 1rem -1.5rem; border-bottom: 1px solid var(--border-light); border-radius: var(--radius-md) var(--radius-md) 0 0;">
@@ -4252,4 +4261,256 @@ async function syncDeleteCategoryFromDB(catId) {
     try {
         await fetchWithTimeout(`${API_BASE_URL}/categories/${catId}`, { method: 'DELETE' }, 2000);
     } catch (err) {}
+}
+
+// -------------------------------------------------------------------
+// EXECUTIVE DATA ANALYTICS DASHBOARD LOGIC
+// -------------------------------------------------------------------
+let trendChartInstance = null;
+let cityChartInstance = null;
+let statusChartInstance = null;
+let categoryChartInstance = null;
+
+window.openDataAnalyticsModal = async function() {
+    closeModals();
+    const overlay = document.getElementById('dataAnalyticsOverlay');
+    const modal = document.getElementById('dataAnalyticsModal');
+    if (overlay && modal) {
+        overlay.classList.add('active');
+        modal.classList.add('active');
+    }
+
+    await fetchOrdersFromAPI();
+    renderDataAnalyticsDashboard();
+};
+
+window.closeDataAnalyticsModal = function() {
+    closeModals();
+    if (document.fullscreenElement) {
+        try { document.exitFullscreen(); } catch(e){}
+    }
+};
+
+window.refreshAnalyticsCharts = async function() {
+    await fetchOrdersFromAPI();
+    renderDataAnalyticsDashboard();
+    showToast('📊 Live Analytics Dashboard Refreshed!', 'success');
+};
+
+window.toggleFullScreenAnalytics = function() {
+    const modal = document.getElementById('dataAnalyticsModal');
+    const toggleBtn = document.getElementById('fullScreenToggleBtn');
+    if (!modal) return;
+
+    if (!document.fullscreenElement) {
+        if (modal.requestFullscreen) {
+            modal.requestFullscreen();
+        } else if (modal.webkitRequestFullscreen) {
+            modal.webkitRequestFullscreen();
+        }
+        if (toggleBtn) toggleBtn.innerHTML = '<i class="fa-solid fa-compress"></i> Exit Full Screen';
+    } else {
+        if (document.exitFullscreen) {
+            document.exitFullscreen();
+        }
+        if (toggleBtn) toggleBtn.innerHTML = '<i class="fa-solid fa-expand"></i> Full Screen';
+    }
+};
+
+function renderDataAnalyticsDashboard() {
+    const orders = [...state.ordersHistory];
+    
+    // 1. Calculate KPI Metrics
+    let totalRev = 0;
+    let deliveredCount = 0;
+    const cityMap = {};
+    const dateMap = {};
+    const statusMap = { Placed: 0, Packing: 0, Shipped: 0, Delivered: 0, Cancelled: 0 };
+    const categoryMap = {};
+
+    orders.forEach(o => {
+        const amt = parseFloat(o.total || 0);
+        totalRev += amt;
+        
+        const st = o.status || 'Placed';
+        statusMap[st] = (statusMap[st] || 0) + 1;
+        if (st === 'Delivered') deliveredCount++;
+
+        // City extraction
+        let cName = 'Nashik';
+        if (o.delivery && o.delivery.city) {
+            cName = o.delivery.city.trim();
+        } else if (o.delivery && o.delivery.address) {
+            cName = o.delivery.address.split(',')[0].trim();
+        }
+        if (!cityMap[cName]) cityMap[cName] = { count: 0, revenue: 0 };
+        cityMap[cName].count += 1;
+        cityMap[cName].revenue += amt;
+
+        // Date extraction
+        let dKey = 'Today';
+        if (o.date) {
+            try {
+                dKey = new Date(o.date).toISOString().split('T')[0];
+            } catch(e) {
+                dKey = String(o.date).split('T')[0];
+            }
+        }
+        if (!dateMap[dKey]) dateMap[dKey] = { count: 0, revenue: 0 };
+        dateMap[dKey].count += 1;
+        dateMap[dKey].revenue += amt;
+
+        // Item category extraction
+        (o.items || []).forEach(i => {
+            const cat = i.category || 'Kirana Staples';
+            categoryMap[cat] = (categoryMap[cat] || 0) + (i.qty || i.quantity || 1);
+        });
+    });
+
+    // Update KPI UI
+    const revEl = document.getElementById('analyticsStatRevenue');
+    const ordEl = document.getElementById('analyticsStatOrders');
+    const delEl = document.getElementById('analyticsStatDelivered');
+    const topCityEl = document.getElementById('analyticsStatTopCity');
+    const topCityOrdEl = document.getElementById('analyticsStatTopCityOrders');
+
+    if (revEl) revEl.textContent = `₹${totalRev.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+    if (ordEl) ordEl.textContent = `${orders.length} Orders`;
+    if (delEl) delEl.textContent = `${deliveredCount} Delivered (${orders.length ? Math.round((deliveredCount/orders.length)*100) : 0}%)`;
+
+    let topCityName = 'N/A';
+    let topCityMaxOrders = 0;
+    Object.keys(cityMap).forEach(c => {
+        if (cityMap[c].count > topCityMaxOrders) {
+            topCityMaxOrders = cityMap[c].count;
+            topCityName = c;
+        }
+    });
+    if (topCityEl) topCityEl.textContent = topCityName;
+    if (topCityOrdEl) topCityOrdEl.textContent = `${topCityMaxOrders} Orders Placed`;
+
+    // Render City Breakdown Table
+    const tableBody = document.getElementById('analyticsCityTableBody');
+    if (tableBody) {
+        const sortedCities = Object.keys(cityMap).sort((a,b) => cityMap[b].revenue - cityMap[a].revenue);
+        tableBody.innerHTML = sortedCities.map(c => `
+            <tr style="border-bottom: 1px solid #E2E8F0;">
+                <td style="padding: 10px; font-weight: 700; color: #0F172A;">${c}</td>
+                <td style="padding: 10px; color: #334155;">${cityMap[c].count} Orders</td>
+                <td style="padding: 10px; font-weight: 700; color: #059669;">₹${cityMap[c].revenue.toFixed(2)}</td>
+                <td style="padding: 10px; color: #475569;">${totalRev ? ((cityMap[c].revenue/totalRev)*100).toFixed(1) : 0}%</td>
+            </tr>
+        `).join('') || '<tr><td colspan="4" style="padding: 12px; text-align: center;">No city data yet.</td></tr>';
+    }
+
+    if (typeof Chart === 'undefined') return;
+
+    // 1. Date Trend Chart
+    const trendCanvas = document.getElementById('analyticsTrendChartCanvas');
+    if (trendCanvas) {
+        if (trendChartInstance) trendChartInstance.destroy();
+        const dates = Object.keys(dateMap).sort();
+        trendChartInstance = new Chart(trendCanvas, {
+            type: 'bar',
+            data: {
+                labels: dates.length ? dates : ['Today'],
+                datasets: [
+                    {
+                        label: 'Sales Revenue (₹)',
+                        data: dates.map(d => dateMap[d].revenue),
+                        backgroundColor: 'rgba(16, 185, 129, 0.7)',
+                        borderColor: '#10B981',
+                        borderWidth: 1.5,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: 'Order Count',
+                        data: dates.map(d => dateMap[d].count),
+                        type: 'line',
+                        borderColor: '#3B82F6',
+                        backgroundColor: '#3B82F6',
+                        borderWidth: 2,
+                        tension: 0.3,
+                        yAxisID: 'y1'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { type: 'linear', position: 'left', title: { display: true, text: 'Revenue (₹)' } },
+                    y1: { type: 'linear', position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'Orders' } }
+                }
+            }
+        });
+    }
+
+    // 2. City Distribution Chart
+    const cityCanvas = document.getElementById('analyticsCityChartCanvas');
+    if (cityCanvas) {
+        if (cityChartInstance) cityChartInstance.destroy();
+        const cities = Object.keys(cityMap);
+        cityChartInstance = new Chart(cityCanvas, {
+            type: 'doughnut',
+            data: {
+                labels: cities.length ? cities : ['Nashik'],
+                datasets: [{
+                    data: cities.map(c => cityMap[c].count),
+                    backgroundColor: ['#10B981', '#3B82F6', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4', '#64748B']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'right' } }
+            }
+        });
+    }
+
+    // 3. Status Breakdown Chart
+    const statusCanvas = document.getElementById('analyticsStatusChartCanvas');
+    if (statusCanvas) {
+        if (statusChartInstance) statusChartInstance.destroy();
+        statusChartInstance = new Chart(statusCanvas, {
+            type: 'pie',
+            data: {
+                labels: ['Placed', 'Packing', 'Shipped', 'Delivered', 'Cancelled'],
+                datasets: [{
+                    data: [statusMap.Placed, statusMap.Packing, statusMap.Shipped, statusMap.Delivered, statusMap.Cancelled],
+                    backgroundColor: ['#F59E0B', '#3B82F6', '#8B5CF6', '#10B981', '#EF4444']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'right' } }
+            }
+        });
+    }
+
+    // 4. Category Volume Chart
+    const catCanvas = document.getElementById('analyticsCategoryChartCanvas');
+    if (catCanvas) {
+        if (categoryChartInstance) categoryChartInstance.destroy();
+        const cats = Object.keys(categoryMap);
+        categoryChartInstance = new Chart(catCanvas, {
+            type: 'bar',
+            data: {
+                labels: cats.length ? cats : ['Kirana Staples', 'Sabzi & Fruits'],
+                datasets: [{
+                    label: 'Items Sold',
+                    data: cats.map(c => categoryMap[c]),
+                    backgroundColor: 'rgba(59, 130, 246, 0.7)',
+                    borderColor: '#3B82F6',
+                    borderWidth: 1.5
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
+    }
 }
