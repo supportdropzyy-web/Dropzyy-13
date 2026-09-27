@@ -21,6 +21,9 @@ class User(Base):
     city = Column(String, nullable=True)
     pincode = Column(String, nullable=True)
     is_verified = Column(Boolean, default=False)
+    store_open = Column(Boolean, default=True)
+    open_time = Column(String, default="08:00")
+    close_time = Column(String, default="22:00")
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     products = relationship("Product", back_populates="supplier_user")
@@ -53,6 +56,7 @@ class Product(Base):
     description = Column(Text, nullable=True)
     nutrition = Column(Text, nullable=True)
     supplier_name = Column(String, default="FreshKart Direct Mandi") # e.g. 'Ramesh Kirana Wholesale Co.'
+    is_online = Column(Boolean, default=True)
     
     supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=True)
     supplier_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
