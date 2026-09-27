@@ -700,6 +700,14 @@ function renderCategories() {
 // 7. RENDER PRODUCTS
 function renderProducts() {
     let filtered = state.products.filter(p => {
+        const isOnline = (p.isOnline !== false && p.is_online !== false);
+        const canEdit = canUserEditProduct(p);
+        
+        // Hide offline products from customers who cannot edit the product
+        if (!isOnline && !canEdit) {
+            return false;
+        }
+
         const matchesCategory = state.activeCategory === 'all' || p.category === state.activeCategory;
         const search = state.searchQuery.toLowerCase();
         const matchesSearch = !search || 
@@ -744,12 +752,17 @@ function renderProducts() {
         const isWishlisted = state.wishlist.has(String(product.id));
         const sName = product.supplierName || 'Dropzyy Direct';
         const canEdit = canUserEditProduct(product);
+        const isOnline = (product.isOnline !== false && product.is_online !== false);
 
         return `
-            <div class="product-card" data-id="${product.id}">
+            <div class="product-card" data-id="${product.id}" style="${!isOnline ? 'border: 2px dashed #EF4444; opacity: 0.88;' : ''}">
                 <div class="product-badge-group">
-                    <span class="product-badge badge-organic">${product.badge}</span>
-                    <span class="product-badge badge-discount">${product.discount}</span>
+                    ${!isOnline ? `
+                        <span class="product-badge" style="background:#DC2626; color:#FFF; font-weight: 800;">🔴 OFFLINE FROM WEBSITE</span>
+                    ` : `
+                        <span class="product-badge badge-organic">${product.badge}</span>
+                        <span class="product-badge badge-discount">${product.discount}</span>
+                    `}
                 </div>
 
                 ${canEdit ? `
@@ -786,12 +799,12 @@ function renderProducts() {
                             <span class="original-price">₹${product.originalPrice}</span>
                         </div>
                         ${isSupplierUser ? `
-                            <span class="badge" style="background:#E2E8F0; color:#475569; font-size: 0.78rem; padding: 6px 10px; border-radius: 6px;">
-                                <i class="fa-solid fa-box-archive"></i> My Product
-                            </span>
+                            <button class="btn btn-sm ${!isOnline ? 'btn-success' : 'btn-secondary'}" onclick="toggleProductOnlineStatus('${product.id}')" style="font-size: 0.75rem; padding: 4px 8px;" title="Click to take product Offline / bring Online">
+                                <i class="fa-solid ${!isOnline ? 'fa-globe' : 'fa-eye-slash'}"></i> ${!isOnline ? 'Set ONLINE' : 'Set OFFLINE'}
+                            </button>
                         ` : `
-                            <button class="add-cart-btn" onclick="addToCart('${product.id}')">
-                                <i class="fa-solid fa-plus"></i> Add
+                            <button class="add-cart-btn" onclick="addToCart('${product.id}')" ${!isOnline ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''}>
+                                <i class="fa-solid fa-plus"></i> ${!isOnline ? 'Offline' : 'Add'}
                             </button>
                         `}
                     </div>
@@ -2140,26 +2153,40 @@ function renderSupplierDashboard() {
     if (supplierProducts.length === 0) {
         supplierProductsContainer.innerHTML = `<p style="text-align: center; color: var(--text-muted); padding: 30px;">No products added yet by your supplier account. Click <strong>+ Add New Product</strong> above to add your Kirana items!</p>`;
     } else {
-        supplierProductsContainer.innerHTML = supplierProducts.map(p => `
-            <div class="supplier-item-row">
-                <img src="${p.image}" alt="${p.title}" class="supplier-item-thumb">
-                <div class="supplier-item-info">
-                    <div class="supplier-item-title">${p.title}</div>
-                    <div class="supplier-item-meta">
-                        ${p.category} | ${p.unit} | <strong>₹${p.price}</strong><br>
-                        <small class="text-primary"><i class="fa-solid fa-truck-field"></i> ${p.supplierName || companyName}</small>
+        supplierProductsContainer.innerHTML = supplierProducts.map(p => {
+            const isOnline = (p.isOnline !== false && p.is_online !== false);
+
+            return `
+                <div class="supplier-item-row" style="${!isOnline ? 'background: #FFF5F5; border: 1px solid #FECACA;' : ''}">
+                    <img src="${p.image}" alt="${p.title}" class="supplier-item-thumb">
+                    <div class="supplier-item-info">
+                        <div class="supplier-item-title">
+                            ${p.title}
+                            ${!isOnline 
+                                ? `<span class="badge" style="background:#FEE2E2; color:#991B1B; font-size:0.75rem; margin-left:6px; padding:2px 8px; border-radius:12px; font-weight:700;">🔴 OFFLINE FROM STORE</span>`
+                                : `<span class="badge" style="background:#D1FAE5; color:#047857; font-size:0.75rem; margin-left:6px; padding:2px 8px; border-radius:12px; font-weight:700;">🟢 ONLINE IN STORE</span>`
+                            }
+                        </div>
+                        <div class="supplier-item-meta">
+                            ${p.category} | ${p.unit} | <strong>₹${p.price}</strong><br>
+                            <small class="text-primary"><i class="fa-solid fa-truck-field"></i> ${p.supplierName || companyName}</small>
+                        </div>
+                    </div>
+                    <div class="supplier-item-actions" style="display: flex; align-items: center; gap: 6px;">
+                        <button class="btn btn-sm ${!isOnline ? 'btn-success' : 'btn-secondary'}" onclick="toggleProductOnlineStatus('${p.id}')" title="Click to toggle product Online/Offline on website">
+                            <i class="fa-solid ${!isOnline ? 'fa-globe' : 'fa-eye-slash'}"></i>
+                            ${!isOnline ? 'Set ONLINE' : 'Set OFFLINE'}
+                        </button>
+                        <button class="btn btn-secondary btn-sm" onclick="openEditProductModal('${p.id}')">
+                            <i class="fa-solid fa-pen"></i> Edit
+                        </button>
+                        <button class="btn btn-secondary btn-sm text-danger" onclick="deleteProduct('${p.id}')">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
                     </div>
                 </div>
-                <div class="supplier-item-actions">
-                    <button class="btn btn-secondary btn-sm" onclick="openEditProductModal('${p.id}')">
-                        <i class="fa-solid fa-pen"></i> Edit
-                    </button>
-                    <button class="btn btn-secondary btn-sm text-danger" onclick="deleteProduct('${p.id}')">
-                        <i class="fa-solid fa-trash"></i>
-                    </button>
-                </div>
-            </div>
-        `).join('');
+            `;
+        }).join('');
     }
 
     supplierDashboardOverlay.classList.add('active');
@@ -2167,6 +2194,54 @@ function renderSupplierDashboard() {
 }
 
 // 11. ADMIN / SUPPLIER PRODUCT CREATE & EDIT
+window.toggleProductOnlineStatus = function(productId) {
+    const product = state.products.find(p => String(p.id) === String(productId));
+    if (!product) return;
+
+    if (!canUserEditProduct(product)) {
+        showToast('Permission Denied: You can only change online/offline status for your own products.', 'error');
+        return;
+    }
+
+    const isCurrentlyOnline = (product.isOnline !== false && product.is_online !== false);
+    const newStatus = !isCurrentlyOnline;
+
+    product.isOnline = newStatus;
+    product.is_online = newStatus;
+
+    renderProducts();
+
+    if (document.getElementById('supplierDashboardModal') && document.getElementById('supplierDashboardModal').classList.contains('active')) {
+        renderSupplierDashboard();
+    }
+
+    const statusMsg = newStatus 
+        ? `Product '<strong>${product.title}</strong>' is now <strong>ONLINE 🟢</strong> (Visible to Customers)`
+        : `Product '<strong>${product.title}</strong>' is now <strong>OFFLINE 🔴</strong> (Hidden from Website)`;
+
+    showToast(statusMsg, newStatus ? 'success' : 'info');
+
+    try {
+        fetchWithTimeout(`${API_BASE_URL}/products/${product.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title: product.title,
+                category: product.category,
+                price: product.price,
+                original_price: product.originalPrice || product.price,
+                unit: product.unit,
+                image: product.image,
+                badge: product.badge,
+                discount: product.discount,
+                description: product.description,
+                supplier_name: product.supplierName,
+                is_online: newStatus
+            })
+        }, 5000).catch(() => {});
+    } catch (e) {}
+};
+
 window.openAddProductModal = function() {
     closeModals();
     populateCategoryDropdowns();
@@ -2174,6 +2249,10 @@ window.openAddProductModal = function() {
     if (adminModalTitle) adminModalTitle.innerHTML = `<i class="fa-solid fa-plus-circle text-primary"></i> Add Kirana Product`;
     if (adminModalSub) adminModalSub.textContent = `Add a new product to the Kirana store database`;
     if (addProductForm) addProductForm.reset();
+
+    if (document.getElementById('prodStatus')) {
+        document.getElementById('prodStatus').value = 'online';
+    }
 
     const supplierInput = document.getElementById('prodSupplierName');
     if (supplierInput) {
@@ -2215,6 +2294,11 @@ window.openEditProductModal = function(productId) {
     if (document.getElementById('prodOriginalPrice')) document.getElementById('prodOriginalPrice').value = product.originalPrice;
     if (document.getElementById('prodUnit')) document.getElementById('prodUnit').value = product.unit;
     if (document.getElementById('prodBadge')) document.getElementById('prodBadge').value = product.badge;
+
+    if (document.getElementById('prodStatus')) {
+        const isOnline = (product.isOnline !== false && product.is_online !== false);
+        document.getElementById('prodStatus').value = isOnline ? 'online' : 'offline';
+    }
 
     const supplierInput = document.getElementById('prodSupplierName');
     if (supplierInput) {
@@ -2264,6 +2348,8 @@ window.deleteProduct = async function(productId) {
 };
 
 function saveProduct(productData, isEdit = false) {
+    const isOnlineVal = productData.is_online ?? true;
+
     if (isEdit) {
         const index = state.products.findIndex(p => p.id === productData.id);
         if (index !== -1) {
@@ -2278,7 +2364,9 @@ function saveProduct(productData, isEdit = false) {
                 badge: productData.badge,
                 discount: productData.discount,
                 description: productData.description,
-                supplierName: productData.supplier_name
+                supplierName: productData.supplier_name,
+                isOnline: isOnlineVal,
+                is_online: isOnlineVal
             };
         }
         renderProducts();
@@ -2298,7 +2386,8 @@ function saveProduct(productData, isEdit = false) {
                     badge: productData.badge,
                     discount: productData.discount,
                     description: productData.description,
-                    supplier_name: productData.supplier_name
+                    supplier_name: productData.supplier_name,
+                    is_online: isOnlineVal
                 })
             }, 15000).then(() => {
                 showToast(`Updated <strong>${productData.title}</strong> in database!`, 'success');
@@ -2319,7 +2408,9 @@ function saveProduct(productData, isEdit = false) {
             badge: productData.badge || 'Fresh Produce',
             discount: productData.discount || '10% OFF',
             description: productData.description || '',
-            supplierName: productData.supplier_name || 'Dropzyy Direct'
+            supplierName: productData.supplier_name || 'Dropzyy Direct',
+            isOnline: isOnlineVal,
+            is_online: isOnlineVal
         };
 
         state.products.unshift(newProduct);
@@ -2340,7 +2431,8 @@ function saveProduct(productData, isEdit = false) {
                     badge: productData.badge,
                     discount: productData.discount,
                     description: productData.description,
-                    supplier_name: productData.supplier_name
+                    supplier_name: productData.supplier_name,
+                    is_online: isOnlineVal
                 })
             }, 15000).then(res => res && res.ok && res.json()).then(saved => {
                 if (saved && saved.id) newProduct.id = saved.id;
@@ -2770,13 +2862,15 @@ window.handleRegisterSubmit = async function(e) {
             const badge = document.getElementById('prodBadge').value.trim() || 'Fresh Produce';
             const supplier_name = document.getElementById('prodSupplierName').value.trim() || 'Dropzyy Direct';
             const description = document.getElementById('prodDesc').value.trim();
+            const is_online = document.getElementById('prodStatus') ? (document.getElementById('prodStatus').value === 'online') : true;
 
             if (title && category && price && image) {
                 const productData = {
                     id, title, category, price, original_price, unit, image, badge,
                     supplier_name,
                     discount: Math.round(((original_price - price) / original_price) * 100) + '% OFF',
-                    description
+                    description,
+                    is_online
                 };
                 saveProduct(productData, Boolean(id));
             }
@@ -3506,15 +3600,6 @@ function renderLiveNotificationsList() {
                             <div>
                                 <h4 style="margin: 0; color: #0F172A; font-size: 1rem; display: flex; align-items: center; gap: 8px;">
                                     Order #${o.id}
-                                    ${isOfflineOrder ? `
-                                        <span class="badge" style="background:#FEF3C7; color:#92400E; font-size: 0.72rem; padding: 2px 8px; border-radius: 12px;">
-                                            <i class="fa-solid fa-shop"></i> OFFLINE
-                                        </span>
-                                    ` : `
-                                        <span class="badge" style="background:#DBEAFE; color:#1E40AF; font-size: 0.72rem; padding: 2px 8px; border-radius: 12px;">
-                                            <i class="fa-solid fa-globe"></i> ONLINE
-                                        </span>
-                                    `}
                                 </h4>
                                 <span style="font-size: 0.82rem; color: #64748B;">Total: <strong style="color: #059669; font-size: 0.95rem;">₹${orderSubtotal.toFixed(2)}</strong> (${o.paymentMethod || (o.delivery ? o.delivery.payment : 'COD') || 'COD'})</span>
                             </div>
@@ -3905,30 +3990,6 @@ function renderBookingTracking(searchQuery = '') {
                     <i class="fa-solid fa-triangle-exclamation text-danger"></i> ORDER CANCELLED
                 </div>
             ` : ''}
-
-            <!-- Online / Offline Order Channel Badge -->
-            <div style="margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-                <div>
-                    ${(order.orderType === 'Offline' || order.channel === 'Offline') ? `
-                        <span class="badge" style="background: #FEF3C7; color: #92400E; font-weight: 700; padding: 4px 10px; border-radius: 20px; font-size: 0.78rem;">
-                            <i class="fa-solid fa-shop"></i> OFFLINE STORE ORDER
-                        </span>
-                    ` : `
-                        <span class="badge" style="background: #DBEAFE; color: #1E40AF; font-weight: 700; padding: 4px 10px; border-radius: 20px; font-size: 0.78rem;">
-                            <i class="fa-solid fa-globe"></i> ONLINE ORDER
-                        </span>
-                    `}
-                </div>
-                ${isAdminOrSupplier ? `
-                    <div style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem;">
-                        <span style="color: #64748B; font-weight: 600;">Mode:</span>
-                        <select onchange="updateOrderChannel('${order.id}', this.value)" style="padding: 2px 8px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.78rem; font-weight: 700; color: #1E293B;">
-                            <option value="Online" ${(order.orderType !== 'Offline' && order.channel !== 'Offline') ? 'selected' : ''}>🌐 Online</option>
-                            <option value="Offline" ${(order.orderType === 'Offline' || order.channel === 'Offline') ? 'selected' : ''}>🏪 Offline</option>
-                        </select>
-                    </div>
-                ` : ''}
-            </div>
 
             <div style="margin-bottom: 0.8rem; color: var(--text-dark); font-size: 0.85rem;">
                 <strong>Customer User ID:</strong> ${custUserId}
