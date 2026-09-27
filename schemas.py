@@ -47,6 +47,9 @@ class UserResponse(BaseModel):
     city: Optional[str] = None
     pincode: Optional[str] = None
     is_verified: Optional[bool] = True
+    store_open: Optional[bool] = True
+    open_time: Optional[str] = "08:00"
+    close_time: Optional[str] = "22:00"
 
     class Config:
         from_attributes = True
@@ -58,6 +61,12 @@ class UserUpdateAddress(BaseModel):
     street_address: Optional[str] = None
     city: Optional[str] = None
     pincode: Optional[str] = None
+
+class SupplierStoreTimingsUpdate(BaseModel):
+    user_id: int
+    store_open: Optional[bool] = True
+    open_time: Optional[str] = "08:00"
+    close_time: Optional[str] = "22:00"
 
 # Supplier Schemas
 class SupplierCreate(BaseModel):
@@ -90,6 +99,7 @@ class ProductCreate(BaseModel):
     nutrition: Optional[str] = ""
     supplier_name: Optional[str] = "FreshKart Direct Mandi"
     supplier_id: Optional[int] = None
+    is_online: Optional[bool] = True
 
 class ProductResponse(BaseModel):
     id: str
@@ -107,6 +117,7 @@ class ProductResponse(BaseModel):
     nutrition: Optional[str]
     supplier_name: Optional[str] = "FreshKart Direct Mandi"
     supplier_id: Optional[int]
+    is_online: Optional[bool] = True
 
     class Config:
         from_attributes = True
