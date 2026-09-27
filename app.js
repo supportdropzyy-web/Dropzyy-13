@@ -710,6 +710,12 @@ function renderProducts() {
         return matchesCategory && matchesSearch;
     });
 
+    // Supplier Product Visibility Restriction: Suppliers ONLY see their own products!
+    const isSupplierUser = state.currentUser && state.currentUser.role === 'supplier';
+    if (isSupplierUser) {
+        filtered = filtered.filter(product => canUserEditProduct(product));
+    }
+
     if (state.sortBy === 'price-low') {
         filtered.sort((a, b) => a.price - b.price);
     } else if (state.sortBy === 'price-high') {
@@ -779,9 +785,15 @@ function renderProducts() {
                             <span class="current-price">₹${product.price}</span>
                             <span class="original-price">₹${product.originalPrice}</span>
                         </div>
-                        <button class="add-cart-btn" onclick="addToCart('${product.id}')">
-                            <i class="fa-solid fa-plus"></i> Add
-                        </button>
+                        ${isSupplierUser ? `
+                            <span class="badge" style="background:#E2E8F0; color:#475569; font-size: 0.78rem; padding: 6px 10px; border-radius: 6px;">
+                                <i class="fa-solid fa-box-archive"></i> My Product
+                            </span>
+                        ` : `
+                            <button class="add-cart-btn" onclick="addToCart('${product.id}')">
+                                <i class="fa-solid fa-plus"></i> Add
+                            </button>
+                        `}
                     </div>
                 </div>
             </div>
@@ -988,8 +1000,13 @@ function updateUserAuthUI() {
 
         if (state.currentUser.role === 'supplier') {
             if (supplierDashboardBtn) supplierDashboardBtn.classList.remove('hidden');
+            if (cartBtn) cartBtn.classList.add('hidden');
+            if (mobileCartBtn) mobileCartBtn.classList.add('hidden');
+            if (myOrdersBtn) myOrdersBtn.classList.add('hidden');
         } else {
             if (supplierDashboardBtn) supplierDashboardBtn.classList.add('hidden');
+            if (cartBtn) cartBtn.classList.remove('hidden');
+            if (mobileCartBtn) mobileCartBtn.classList.remove('hidden');
         }
     } else {
         const adminToolbarRow = document.getElementById('adminToolbarRow');
@@ -2023,6 +2040,41 @@ window.canUserEditProduct = function(product) {
 
         return false;
     }
+
+    return false;
+};
+
+window.isItemFromSupplier = function(item) {
+    if (!state.currentUser || state.currentUser.role !== 'supplier') return false;
+    
+    if (state.currentUser.supplier_id && item.supplier_id && String(item.supplier_id) === String(state.currentUser.supplier_id)) {
+        return true;
+    }
+    if (state.currentUser.id && item.supplier_user_id && String(item.supplier_user_id) === String(state.currentUser.id)) {
+        return true;
+    }
+
+    if (item.id || item.productId || item.title) {
+        const matchingProd = state.products.find(p => 
+            (item.productId && String(p.id) === String(item.productId)) ||
+            (item.id && String(p.id) === String(item.id)) ||
+            (item.title && p.title && p.title.toLowerCase() === item.title.toLowerCase())
+        );
+        if (matchingProd && canUserEditProduct(matchingProd)) {
+            return true;
+        }
+    }
+
+    const itemSupplier = (item.supplierName || item.supplier_name || '').trim().toLowerCase();
+    if (!itemSupplier) return false;
+
+    const myCompany = (state.currentUser.supplier_company_name || '').trim().toLowerCase();
+    const myName = (state.currentUser.full_name || '').trim().toLowerCase();
+    const myUser = (state.currentUser.username || '').trim().toLowerCase();
+
+    if (myCompany && (itemSupplier === myCompany || itemSupplier.includes(myCompany) || myCompany.includes(itemSupplier))) return true;
+    if (myName && (itemSupplier === myName || itemSupplier.includes(myName) || myName.includes(itemSupplier))) return true;
+    if (myUser && (itemSupplier === myUser || itemSupplier.includes(myUser) || myUser.includes(itemSupplier))) return true;
 
     return false;
 };
@@ -3386,26 +3438,38 @@ function renderLiveNotificationsList() {
     const container = document.getElementById('liveNotificationsList');
     if (!container) return;
 
-    const allOrders = [...state.ordersHistory];
+    let allOrders = [...state.ordersHistory];
+    const isSupplierRole = state.currentUser && state.currentUser.role === 'supplier';
+
+    // Suppliers ONLY see live orders related to their own products!
+    if (isSupplierRole) {
+        allOrders = allOrders.filter(o => (o.items || []).some(item => isItemFromSupplier(item)));
+    }
+
     if (allOrders.length === 0) {
-        container.innerHTML = '<div style="padding: 24px; text-align: center; color: #64748B;"><i class="fa-solid fa-bell-slash" style="font-size: 2rem; margin-bottom: 8px; color: #CBD5E1; display: block;"></i> No incoming orders yet.</div>';
+        container.innerHTML = '<div style="padding: 24px; text-align: center; color: #64748B;"><i class="fa-solid fa-bell-slash" style="font-size: 2rem; margin-bottom: 8px; color: #CBD5E1; display: block;"></i> No incoming orders found for your supplier products.</div>';
         return;
     }
 
     container.innerHTML = `
         <div style="display: flex; flex-direction: column; gap: 12px;">
             ${allOrders.map(o => {
-                const cName = (o.delivery && o.delivery.name) || o.customerName || 'Customer';
-                const cPhone = (o.delivery && o.delivery.phone) || 'N/A';
-                const cAddr = (o.delivery && o.delivery.address) || 'N/A';
-                const itemsStr = (o.items || []).map(i => `${i.title || i.name} (x${i.qty || i.quantity || 1})`).join(', ');
+                const relevantItems = isSupplierRole 
+                    ? (o.items || []).filter(i => isItemFromSupplier(i)) 
+                    : (o.items || []);
+                
+                const cName = isSupplierRole ? '[Protected for Privacy - Supplier View]' : ((o.delivery && o.delivery.name) || o.customerName || 'Customer');
+                const cPhone = isSupplierRole ? '*** Protected ***' : ((o.delivery && o.delivery.phone) || 'N/A');
+                const cAddr = isSupplierRole ? '[Protected / Hidden for Privacy]' : ((o.delivery && o.delivery.address) || 'N/A');
+                const itemsStr = relevantItems.map(i => `${i.title || i.name} (x${i.qty || i.quantity || 1})`).join(', ');
+                const orderSubtotal = relevantItems.reduce((sum, i) => sum + (parseFloat(i.price) * parseInt(i.qty || i.quantity || 1)), 0);
 
                 return `
                     <div style="background: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 12px; padding: 14px; position: relative;">
                         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">
                             <div>
                                 <h4 style="margin: 0; color: #0F172A; font-size: 1rem;">Order #${o.id}</h4>
-                                <span style="font-size: 0.82rem; color: #64748B;">Total: <strong style="color: #059669; font-size: 0.95rem;">₹${o.total}</strong> (${o.paymentMethod || 'COD'})</span>
+                                <span style="font-size: 0.82rem; color: #64748B;">Total: <strong style="color: #059669; font-size: 0.95rem;">₹${orderSubtotal.toFixed(2)}</strong> (${o.paymentMethod || (o.delivery ? o.delivery.payment : 'COD') || 'COD'})</span>
                             </div>
                             <span class="badge" style="background: ${o.status === 'Delivered' ? '#D1FAE5; color: #047857;' : o.status === 'Cancelled' ? '#FEE2E2; color: #B91C1C;' : '#FEF3C7; color: #B45309;'} font-weight: 700; padding: 4px 10px; border-radius: 20px; font-size: 0.78rem;">
                                 ${o.status || 'Placed'}
@@ -3415,7 +3479,7 @@ function renderLiveNotificationsList() {
                         <div style="font-size: 0.82rem; color: #334155; margin-bottom: 8px; display: flex; flex-direction: column; gap: 4px;">
                             <div><i class="fa-solid fa-user text-primary"></i> <strong>Customer:</strong> ${cName} (${cPhone})</div>
                             <div><i class="fa-solid fa-location-dot text-danger"></i> <strong>Address:</strong> ${cAddr}</div>
-                            <div><i class="fa-solid fa-cart-flatbed text-success"></i> <strong>Items:</strong> ${itemsStr || 'Kirana items'}</div>
+                            <div><i class="fa-solid fa-cart-flatbed text-success"></i> <strong>Your Items:</strong> ${itemsStr || 'Kirana items'}</div>
                         </div>
 
                         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
@@ -3705,16 +3769,27 @@ function renderBookingTracking(searchQuery = '') {
     if (!bookingTrackingContainer) return;
     
     let bookingsToDisplay = [...state.ordersHistory];
+    const isSupplierRole = state.currentUser && state.currentUser.role === 'supplier';
+    const isSystemAdmin = state.currentUser && (state.currentUser.role === 'admin' || state.currentUser.role === 'sub_admin');
 
     if (searchQuery && searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase();
         bookingsToDisplay = bookingsToDisplay.filter(o => 
             o.id.toLowerCase().includes(q) ||
-            (o.delivery && o.delivery.name && o.delivery.name.toLowerCase().includes(q)) ||
-            (o.delivery && o.delivery.phone && o.delivery.phone.includes(q)) ||
-            (o.delivery && o.delivery.email && o.delivery.email.toLowerCase().includes(q))
+            (!isSupplierRole && o.delivery && o.delivery.name && o.delivery.name.toLowerCase().includes(q)) ||
+            (!isSupplierRole && o.delivery && o.delivery.phone && o.delivery.phone.includes(q)) ||
+            (!isSupplierRole && o.delivery && o.delivery.email && o.delivery.email.toLowerCase().includes(q))
         );
-    } else if (state.currentUser && state.currentUser.role !== 'admin' && state.currentUser.role !== 'supplier') {
+    }
+
+    // Role-based Order Scoping:
+    if (isSupplierRole) {
+        // Suppliers ONLY see orders containing items belonging to their supplier account!
+        bookingsToDisplay = bookingsToDisplay.filter(o => {
+            return (o.items || []).some(item => isItemFromSupplier(item));
+        });
+    } else if (!isSystemAdmin) {
+        // Customer view: only see their own placed orders
         const currentUserId = String(state.currentUser.id || '').toLowerCase();
         const currentUsername = String(state.currentUser.username || '').toLowerCase();
         const currentEmail = String(state.currentUser.email || '').toLowerCase();
@@ -3729,23 +3804,41 @@ function renderBookingTracking(searchQuery = '') {
     
     if (bookingsToDisplay.length === 0) {
         bookingTrackingContainer.innerHTML = searchQuery ? 
-            `<p class="empty-state" style="padding: 20px; text-align: center;">No order found matching "<strong>${searchQuery}</strong>". Please verify your Order ID or Phone Number.</p>` :
-            '<p class="empty-state" style="padding: 24px; text-align: center;">No bookings found in the system yet.</p>';
+            `<p class="empty-state" style="padding: 20px; text-align: center;">No order found matching "<strong>${searchQuery}</strong>". Please verify your Order ID.</p>` :
+            (isSupplierRole ? 
+                '<p class="empty-state" style="padding: 24px; text-align: center;">No orders containing your supplier products yet.</p>' :
+                '<p class="empty-state" style="padding: 24px; text-align: center;">No bookings found in the system yet.</p>');
         return;
     }
 
-    const isAdminOrSupplier = state.currentUser && (state.currentUser.role === 'admin' || state.currentUser.role === 'supplier' || state.currentUser.role === 'sub_admin');
+    const isAdminOrSupplier = isSystemAdmin || isSupplierRole;
 
     const toggleSoundAlertBtn = document.getElementById('toggleSoundAlertBtn');
     if (toggleSoundAlertBtn) {
-        if (isAdminOrSupplier) {
+        if (isSystemAdmin) {
             toggleSoundAlertBtn.classList.remove('hidden');
         } else {
             toggleSoundAlertBtn.classList.add('hidden');
         }
     }
 
-    bookingTrackingContainer.innerHTML = bookingsToDisplay.map(order => `
+    bookingTrackingContainer.innerHTML = bookingsToDisplay.map(order => {
+        // Filter item list: Suppliers ONLY see items from their own catalog!
+        const displayItems = isSupplierRole 
+            ? (order.items || []).filter(item => isItemFromSupplier(item))
+            : (order.items || []);
+
+        // Obscure Customer Personal Info from Supplier view for complete privacy
+        const custUserId = isSupplierRole ? '[Protected for Privacy - Supplier View]' : (order.userId ? order.userId : 'Guest Customer');
+        const custName = isSupplierRole ? '[Protected for Privacy - Supplier View]' : (order.delivery ? order.delivery.name : 'Customer');
+        const custPhone = isSupplierRole ? '*** Protected ***' : (order.delivery ? order.delivery.phone : 'N/A');
+        const custEmail = isSupplierRole ? '[Protected]' : (order.delivery ? order.delivery.email : '');
+        const custAddress = isSupplierRole ? '[Protected / Hidden for Privacy]' : (order.delivery ? order.delivery.address : 'N/A');
+        const payMode = order.delivery ? (order.delivery.payment || 'COD').toUpperCase() : 'COD';
+
+        const subTotal = displayItems.reduce((s, i) => s + (parseFloat(i.price) * parseInt(i.qty || i.quantity || 1)), 0);
+
+        return `
         <div class="order-card" style="${order.status === 'Cancelled' ? 'border: 2px solid #FCA5A5; background: #FFF5F5;' : ''}">
             <div class="order-header" style="background-color: ${order.status === 'Cancelled' ? '#FEE2E2' : 'var(--bg-light)'}; padding: 1rem; margin: -1.5rem -1.5rem 1rem -1.5rem; border-bottom: 1px solid var(--border-light); border-radius: var(--radius-md) var(--radius-md) 0 0;">
                 <div>
@@ -3767,21 +3860,19 @@ function renderBookingTracking(searchQuery = '') {
             ` : ''}
 
             <div style="margin-bottom: 0.8rem; color: var(--text-dark); font-size: 0.85rem;">
-                <strong>Customer User ID:</strong> ${order.userId ? order.userId : 'Guest Customer'}
+                <strong>Customer User ID:</strong> ${custUserId}
             </div>
             
-            ${order.delivery ? `
             <div style="background-color: #f1f5f9; padding: 0.8rem; border-radius: var(--radius-sm); margin-bottom: 1rem; font-size: 0.85rem; border: 1px solid var(--border-light);">
-                <strong>Customer Name:</strong> ${order.delivery.name}<br>
-                <strong>Phone:</strong> ${order.delivery.phone}<br>
-                ${order.delivery.email ? `<strong>Email:</strong> ${order.delivery.email}<br>` : ''}
-                <strong>Address:</strong> ${order.delivery.address}<br>
-                <strong>Payment Mode:</strong> ${(order.delivery.payment || 'COD').toUpperCase()}
+                <strong>Customer Name:</strong> ${custName}<br>
+                <strong>Phone:</strong> ${custPhone}<br>
+                ${custEmail ? `<strong>Email:</strong> ${custEmail}<br>` : ''}
+                <strong>Address:</strong> ${custAddress}<br>
+                <strong>Payment Mode:</strong> ${payMode}
             </div>
-            ` : ''}
 
             <div class="order-items-list">
-                ${order.items.map(item => `
+                ${displayItems.map(item => `
                     <div class="order-item-row" style="background-color: #fff; border: 1px solid var(--border-light); padding: 0.5rem; border-radius: var(--radius-sm);">
                         <img src="${item.image}" alt="${item.title}" class="order-item-img" style="width: 40px; height: 40px;">
                         <div class="order-item-info">
@@ -3796,40 +3887,17 @@ function renderBookingTracking(searchQuery = '') {
             </div>
 
             <!-- Itemized Bill Breakdown -->
-            ${(() => {
-                const sub = order.items.reduce((s, i) => s + (parseFloat(i.price) * parseInt(i.qty || i.quantity || 1)), 0);
-                const disc = parseFloat(order.discount || (order.delivery && order.delivery.discount) || 0);
-                const ship = parseFloat(order.shipping !== undefined ? order.shipping : ((order.delivery && order.delivery.shipping !== undefined) ? order.delivery.shipping : (sub >= 299 ? 0 : 29)));
-                const gTotal = parseFloat(order.total || (sub - disc + ship));
-
-                return `
-                <div class="order-bill-summary" style="background: #F8FAFC; border: 1px solid #E2E8F0; padding: 10px 14px; border-radius: 8px; margin: 10px 0; font-size: 0.85rem;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                        <span style="color: #64748B;">Items Subtotal:</span>
-                        <strong style="color: #334155;">₹${sub.toFixed(2)}</strong>
-                    </div>
-                    ${disc > 0 ? `
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                        <span style="color: #059669;">Promo Discount:</span>
-                        <strong style="color: #059669;">-₹${disc.toFixed(2)}</strong>
-                    </div>
-                    ` : ''}
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                        <span style="color: #64748B;">Delivery Charge:</span>
-                        <strong style="color: ${ship === 0 ? '#059669' : '#334155'};">${ship === 0 ? 'FREE (₹0.00)' : '₹' + ship.toFixed(2)}</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; border-top: 1px dashed #CBD5E1; padding-top: 6px; font-size: 0.95rem;">
-                        <span style="font-weight: 700; color: #0F172A;">Grand Total:</span>
-                        <strong style="color: #059669; font-size: 1.05rem;">₹${gTotal.toFixed(2)}</strong>
-                    </div>
+            <div class="order-bill-summary" style="background: #F8FAFC; border: 1px solid #E2E8F0; padding: 10px 14px; border-radius: 8px; margin: 10px 0; font-size: 0.85rem;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span style="color: #64748B;">${isSupplierRole ? 'Your Items Subtotal:' : 'Items Subtotal:'}</span>
+                    <strong style="color: #334155;">₹${subTotal.toFixed(2)}</strong>
                 </div>
-                `;
-            })()}
+            </div>
 
             <div class="order-footer" style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-top: 10px;">
                 <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                    <button class="action-btn" onclick="downloadOrderPDF('${order.id}')" title="Generate Invoice PDF" style="padding: 0.4rem 0.8rem; height: auto;"><i class="fa-solid fa-file-pdf"></i> Download PDF Bill</button>
-                    ${(order.status !== 'Cancelled' && order.status !== 'Delivered') ? `
+                    ${!isSupplierRole ? `<button class="action-btn" onclick="downloadOrderPDF('${order.id}')" title="Generate Invoice PDF" style="padding: 0.4rem 0.8rem; height: auto;"><i class="fa-solid fa-file-pdf"></i> Download PDF Bill</button>` : ''}
+                    ${(!isSupplierRole && order.status !== 'Cancelled' && order.status !== 'Delivered') ? `
                         <button class="action-btn text-danger" onclick="cancelUserOrder('${order.id}')" style="color: #DC2626; background: #FEE2E2; border: 1px solid #FCA5A5; padding: 0.4rem 0.8rem; height: auto;" title="Cancel Order">
                             <i class="fa-solid fa-ban"></i> Cancel Order
                         </button>
@@ -3846,7 +3914,8 @@ function renderBookingTracking(searchQuery = '') {
                 ` : ''}
             </div>
         </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
 window.updateBookingStatus = async function(orderId, newStatus) {
