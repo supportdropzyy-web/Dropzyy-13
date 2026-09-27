@@ -11,6 +11,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js Library for Data Analytics Graphs -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- Main Stylesheet -->
     <link rel="stylesheet" href="style.css">
     <!-- EmailJS SDK & Configuration -->
@@ -119,6 +121,11 @@
                     <button class="action-btn track-bookings-btn hidden" id="trackBookingsBtn" title="Booking Tracking Platform">
                         <i class="fa-solid fa-map-location-dot text-primary"></i>
                         <span>Track Bookings</span>
+                    </button>
+
+                    <button class="action-btn admin-analytics-btn hidden" id="adminAnalyticsBtn" onclick="openDataAnalyticsModal()" title="Full-Screen Executive Data Analytics">
+                        <i class="fa-solid fa-chart-line text-primary"></i>
+                        <span>Data Analytics 📊</span>
                     </button>
 
                     <button class="action-btn admin-category-btn hidden" id="adminCategoryBtn" onclick="openAdminCategoriesModal()" title="Add & Manage Categories">
@@ -379,6 +386,9 @@
         <div class="supplier-products-list-header" style="flex-wrap: wrap; gap: 8px;">
             <h3>Registered Users & System Control</h3>
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="openDataAnalyticsModal()">
+                    <i class="fa-solid fa-chart-line text-primary"></i> Data Analytics 📊
+                </button>
                 <button type="button" class="btn btn-secondary btn-sm" id="adminTrackOrdersBtn" onclick="openBookingTrackingModal()">
                     <i class="fa-solid fa-magnifying-glass text-primary"></i> Track Order ID
                 </button>
@@ -1108,6 +1118,153 @@
         <div class="modal-body" style="padding: 16px 0; max-height: 70vh; overflow-y: auto;">
             <div id="liveNotificationsList">
                 <!-- Dynamically rendered live unread orders -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Full-Screen Executive Data Analytics Portal Modal -->
+    <div class="modal-overlay" id="dataAnalyticsOverlay"></div>
+    <div class="supplier-dashboard-modal" id="dataAnalyticsModal" style="max-width: 96vw; width: 96vw; max-height: 94vh; height: 94vh; padding: 20px; border-radius: 20px;">
+        <div class="modal-header" style="border-bottom: 1px solid #E2E8F0; padding-bottom: 12px; margin-bottom: 14px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; flex-wrap: wrap; gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(135deg, #10B981, #059669); color: #FFF; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; box-shadow: 0 4px 12px rgba(16,185,129,0.3);">
+                        <i class="fa-solid fa-chart-pie"></i>
+                    </div>
+                    <div>
+                        <h2 style="margin: 0; font-size: 1.25rem; color: #0F172A; display: flex; align-items: center; gap: 8px;">
+                            Executive Data Analytics Dashboard
+                            <span class="badge" style="background: #10B981; color: #FFF; font-size: 0.72rem; padding: 2px 8px; border-radius: 12px;">LIVE MONITORING</span>
+                        </h2>
+                        <span style="font-size: 0.8rem; color: #64748B;">Real-time order tracking, date-wise sales trends & city-wise revenue distribution</span>
+                    </div>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <button class="btn btn-secondary btn-sm" onclick="refreshAnalyticsCharts()" title="Refresh Live Data">
+                        <i class="fa-solid fa-rotate-right"></i> Refresh Live Data
+                    </button>
+                    <button class="btn btn-secondary btn-sm" onclick="toggleFullScreenAnalytics()" id="fullScreenToggleBtn" title="Toggle Full Screen Mode">
+                        <i class="fa-solid fa-expand"></i> Full Screen
+                    </button>
+                    <button class="close-modal-btn" onclick="closeDataAnalyticsModal()" style="position: static;"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-body" style="height: calc(100% - 70px); overflow-y: auto; padding-right: 4px;">
+            <!-- Key Executive Performance Metrics Cards Grid -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 20px;">
+                <div style="background: linear-gradient(135deg, #F0FDF4, #DCFCE7); border: 1px solid #A7F3D0; padding: 16px; border-radius: 14px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                        <span style="font-size: 0.8rem; font-weight: 700; color: #047857;">TOTAL SALES REVENUE</span>
+                        <i class="fa-solid fa-indian-rupee-sign" style="color: #059669; font-size: 1.1rem;"></i>
+                    </div>
+                    <div id="analyticsStatRevenue" style="font-size: 1.5rem; font-weight: 800; color: #065F46;">₹0.00</div>
+                    <span style="font-size: 0.72rem; color: #047857; font-weight: 600;"><i class="fa-solid fa-arrow-trend-up"></i> Live System Total</span>
+                </div>
+
+                <div style="background: linear-gradient(135deg, #EFF6FF, #DBEAFE); border: 1px solid #BFDBFE; padding: 16px; border-radius: 14px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                        <span style="font-size: 0.8rem; font-weight: 700; color: #1E40AF;">TOTAL ORDERS PLACED</span>
+                        <i class="fa-solid fa-bag-shopping" style="color: #2563EB; font-size: 1.1rem;"></i>
+                    </div>
+                    <div id="analyticsStatOrders" style="font-size: 1.5rem; font-weight: 800; color: #1E3A8A;">0 Orders</div>
+                    <span id="analyticsStatDelivered" style="font-size: 0.72rem; color: #1D4ED8; font-weight: 600;">0 Delivered</span>
+                </div>
+
+                <div style="background: linear-gradient(135deg, #FFFBEB, #FEF3C7); border: 1px solid #FDE68A; padding: 16px; border-radius: 14px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                        <span style="font-size: 0.8rem; font-weight: 700; color: #92400E;">TOP PERFORMING CITY</span>
+                        <i class="fa-solid fa-city" style="color: #D97706; font-size: 1.1rem;"></i>
+                    </div>
+                    <div id="analyticsStatTopCity" style="font-size: 1.25rem; font-weight: 800; color: #78350F; word-break: break-word;">N/A</div>
+                    <span id="analyticsStatTopCityOrders" style="font-size: 0.72rem; color: #B45309; font-weight: 600;">0 Orders</span>
+                </div>
+
+                <div style="background: linear-gradient(135deg, #F3E8FF, #E9D5FF); border: 1px solid #DDD6FE; padding: 16px; border-radius: 14px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                        <span style="font-size: 0.8rem; font-weight: 700; color: #6B21A8;">AVG DELIVERY TIME</span>
+                        <i class="fa-solid fa-truck-fast" style="color: #9333EA; font-size: 1.1rem;"></i>
+                    </div>
+                    <div id="analyticsStatDeliveryTime" style="font-size: 1.5rem; font-weight: 800; color: #581C87;">14 Mins</div>
+                    <span style="font-size: 0.72rem; color: #7E22CE; font-weight: 600;"><i class="fa-solid fa-bolt"></i> Instant Kirana Speed</span>
+                </div>
+            </div>
+
+            <!-- Analytics Visual Charts Grid (2x2 Layout) -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; margin-bottom: 20px;">
+                <!-- Chart 1: Date-Wise Sales Revenue & Orders Trend -->
+                <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                        <h4 style="margin: 0; font-size: 0.95rem; color: #0F172A; display: flex; align-items: center; gap: 6px;">
+                            <i class="fa-solid fa-chart-column text-primary"></i> Date-Wise Sales Revenue & Orders Trend
+                        </h4>
+                        <span style="font-size: 0.75rem; color: #64748B;">Daily Performance</span>
+                    </div>
+                    <div style="height: 240px; position: relative;">
+                        <canvas id="analyticsTrendChartCanvas"></canvas>
+                    </div>
+                </div>
+
+                <!-- Chart 2: City-Wise Orders & Revenue Distribution -->
+                <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                        <h4 style="margin: 0; font-size: 0.95rem; color: #0F172A; display: flex; align-items: center; gap: 6px;">
+                            <i class="fa-solid fa-map-location-dot text-primary"></i> City-Wise Orders Distribution
+                        </h4>
+                        <span style="font-size: 0.75rem; color: #64748B;">Geographic Reach</span>
+                    </div>
+                    <div style="height: 240px; position: relative;">
+                        <canvas id="analyticsCityChartCanvas"></canvas>
+                    </div>
+                </div>
+
+                <!-- Chart 3: Order Status Breakdown -->
+                <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                        <h4 style="margin: 0; font-size: 0.95rem; color: #0F172A; display: flex; align-items: center; gap: 6px;">
+                            <i class="fa-solid fa-chart-pie text-primary"></i> Live Order Fulfillment Status
+                        </h4>
+                        <span style="font-size: 0.75rem; color: #64748B;">Status Breakdown</span>
+                    </div>
+                    <div style="height: 240px; position: relative;">
+                        <canvas id="analyticsStatusChartCanvas"></canvas>
+                    </div>
+                </div>
+
+                <!-- Chart 4: Top Selling Product Categories -->
+                <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                        <h4 style="margin: 0; font-size: 0.95rem; color: #0F172A; display: flex; align-items: center; gap: 6px;">
+                            <i class="fa-solid fa-layer-group text-primary"></i> Top Selling Product Categories
+                        </h4>
+                        <span style="font-size: 0.75rem; color: #64748B;">Category Volume</span>
+                    </div>
+                    <div style="height: 240px; position: relative;">
+                        <canvas id="analyticsCategoryChartCanvas"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Detailed City Breakdown Data Table -->
+            <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 16px; margin-bottom: 16px;">
+                <h4 style="margin: 0 0 12px 0; font-size: 0.95rem; color: #0F172A;"><i class="fa-solid fa-table-list text-primary"></i> Detailed City-Wise Sales Data Table</h4>
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: left;">
+                        <thead>
+                            <tr style="background: #F8FAFC; border-bottom: 2px solid #E2E8F0;">
+                                <th style="padding: 10px; color: #475569;">City / Location</th>
+                                <th style="padding: 10px; color: #475569;">Total Orders</th>
+                                <th style="padding: 10px; color: #475569;">Total Sales Revenue</th>
+                                <th style="padding: 10px; color: #475569;">Market Share (%)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="analyticsCityTableBody">
+                            <!-- Rendered dynamically -->
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
