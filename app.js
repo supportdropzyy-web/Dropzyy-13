@@ -965,21 +965,26 @@ function updateUserAuthUI() {
 
         const adminToolbarRow = document.getElementById('adminToolbarRow');
 
+        const headerNotificationBtn = document.getElementById('headerNotificationBtn');
+
         if (state.currentUser.role === 'admin' || state.currentUser.role === 'sub_admin') {
             if (adminControlCenterBtn) adminControlCenterBtn.classList.remove('hidden');
             if (adminPortalBtn) adminPortalBtn.classList.remove('hidden');
             if (trackBookingsBtn) trackBookingsBtn.classList.remove('hidden');
             if (adminToolbarRow) adminToolbarRow.classList.remove('hidden');
+            if (headerNotificationBtn) headerNotificationBtn.classList.remove('hidden');
         } else if (state.currentUser.role === 'supplier') {
             if (adminControlCenterBtn) adminControlCenterBtn.classList.add('hidden');
             if (adminPortalBtn) adminPortalBtn.classList.remove('hidden');
             if (trackBookingsBtn) trackBookingsBtn.classList.remove('hidden');
             if (adminToolbarRow) adminToolbarRow.classList.remove('hidden');
+            if (headerNotificationBtn) headerNotificationBtn.classList.remove('hidden');
         } else {
             if (adminControlCenterBtn) adminControlCenterBtn.classList.add('hidden');
             if (adminPortalBtn) adminPortalBtn.classList.add('hidden');
             if (trackBookingsBtn) trackBookingsBtn.classList.add('hidden');
             if (adminToolbarRow) adminToolbarRow.classList.add('hidden');
+            if (headerNotificationBtn) headerNotificationBtn.classList.add('hidden');
         }
 
         if (state.currentUser.role === 'supplier') {
@@ -989,6 +994,7 @@ function updateUserAuthUI() {
         }
     } else {
         const adminToolbarRow = document.getElementById('adminToolbarRow');
+        const headerNotificationBtn = document.getElementById('headerNotificationBtn');
         userAuthWrapper.innerHTML = `
             <button class="action-btn login-trigger-btn" id="openAuthBtn" onclick="openAuthModal()">
                 <i class="fa-regular fa-user"></i>
@@ -996,6 +1002,7 @@ function updateUserAuthUI() {
             </button>
         `;
         if (headerTrackOrderBtn) headerTrackOrderBtn.classList.add('hidden');
+        if (headerNotificationBtn) headerNotificationBtn.classList.add('hidden');
         if (adminControlCenterBtn) adminControlCenterBtn.classList.add('hidden');
         if (adminPortalBtn) adminPortalBtn.classList.add('hidden');
         if (supplierDashboardBtn) supplierDashboardBtn.classList.add('hidden');
@@ -3370,8 +3377,10 @@ async function fetchOrdersFromAPI() {
 
                 state.ordersHistory = apiOrders;
 
-                if (newOrdersFound.length > 0) {
-                    // Push all newly discovered orders to unread list
+                const isAdminUser = state.currentUser && (state.currentUser.role === 'admin' || state.currentUser.role === 'supplier' || state.currentUser.role === 'sub_admin');
+
+                if (newOrdersFound.length > 0 && isAdminUser) {
+                    // Push all newly discovered orders to unread list for Admin
                     newOrdersFound.forEach(no => {
                         if (!unreadOrdersList.some(u => String(u.id) === String(no.id))) {
                             unreadOrdersList.unshift(no);
@@ -3379,7 +3388,7 @@ async function fetchOrdersFromAPI() {
                     });
 
                     updateNotificationBadgeUI();
-                    playOrderAlertRing(); // 10-second loud alarm ring!
+                    playOrderAlertRing(); // 10-second loud alarm ring ONLY for Admin!
 
                     const latestOrder = newOrdersFound[0];
                     const custName = (latestOrder.delivery && latestOrder.delivery.name) || latestOrder.customerName || 'Customer';
@@ -3387,9 +3396,6 @@ async function fetchOrdersFromAPI() {
 
                     if (typeof bookingTrackingContainer !== 'undefined' && bookingTrackingContainer) {
                         renderBookingTracking();
-                    }
-                    if (typeof myOrdersContainer !== 'undefined' && myOrdersContainer) {
-                        renderMyOrders();
                     }
                 }
             }
