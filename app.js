@@ -3175,7 +3175,50 @@ function showToast(message, type = 'success') {
     }, 3000);
 }
 
-// 18. MY ORDERS LOGIC
+// 18. MY ORDERS & LIVE ORDER AUDIO RINGING LOGIC
+let knownOrderIds = new Set();
+let isOrderSoundEnabled = true;
+
+window.playOrderAlertRing = function() {
+    if (!isOrderSoundEnabled) return;
+    try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        const ctx = new AudioContext();
+
+        const notes = [659.25, 783.99, 1046.50, 659.25, 1046.50];
+        notes.forEach((freq, idx) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.18);
+
+            gain.gain.setValueAtTime(0, ctx.currentTime + idx * 0.18);
+            gain.gain.linearRampToValueAtTime(0.8, ctx.currentTime + idx * 0.18 + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.18 + 0.4);
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            osc.start(ctx.currentTime + idx * 0.18);
+            osc.stop(ctx.currentTime + idx * 0.18 + 0.45);
+        });
+    } catch (err) {
+        console.warn('Audio ring playback notice:', err);
+    }
+};
+
+window.toggleOrderSoundAlert = function() {
+    isOrderSoundEnabled = !isOrderSoundEnabled;
+    if (isOrderSoundEnabled) {
+        playOrderAlertRing();
+        showToast('🔔 Live Order Audio Alert Ringing: ON', 'success');
+    } else {
+        showToast('🔕 Live Order Audio Alert Ringing: OFF', 'info');
+    }
+};
+
 async function fetchOrdersFromAPI() {
     try {
         const userId = state.currentUser ? (state.currentUser.username || state.currentUser.id) : null;
@@ -3186,13 +3229,46 @@ async function fetchOrdersFromAPI() {
         if (res && res.ok) {
             const apiOrders = await res.json();
             if (Array.isArray(apiOrders)) {
+                let hasNewOrder = false;
+                let newOrderDetails = null;
+
+                if (knownOrderIds.size > 0) {
+                    for (const o of apiOrders) {
+                        if (o.id && !knownOrderIds.has(String(o.id))) {
+                            hasNewOrder = true;
+                            newOrderDetails = o;
+                            break;
+                        }
+                    }
+                }
+
+                apiOrders.forEach(o => { if (o.id) knownOrderIds.add(String(o.id)); });
+
                 state.ordersHistory = apiOrders;
+
+                if (hasNewOrder && newOrderDetails) {
+                    playOrderAlertRing();
+                    const custName = (newOrderDetails.delivery && newOrderDetails.delivery.name) || newOrderDetails.customerName || 'Customer';
+                    showToast(`🚨 <strong>NEW LIVE ORDER RECEIVED!</strong><br>Order ID: #${newOrderDetails.id} (₹${newOrderDetails.total}) - ${custName}`, 'success');
+
+                    if (typeof bookingTrackingContainer !== 'undefined' && bookingTrackingContainer) {
+                        renderBookingTracking();
+                    }
+                    if (typeof myOrdersContainer !== 'undefined' && myOrdersContainer) {
+                        renderMyOrders();
+                    }
+                }
             }
         }
     } catch (e) {
         console.warn('Orders API sync error:', e);
     }
 }
+
+// Auto poll live orders every 5 seconds
+setInterval(() => {
+    fetchOrdersFromAPI();
+}, 5000);
 
 async function openMyOrdersModal() {
     closeModals();
