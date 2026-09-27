@@ -3498,11 +3498,24 @@ function renderLiveNotificationsList() {
                 const itemsStr = relevantItems.map(i => `${i.title || i.name} (x${i.qty || i.quantity || 1})`).join(', ');
                 const orderSubtotal = relevantItems.reduce((sum, i) => sum + (parseFloat(i.price) * parseInt(i.qty || i.quantity || 1)), 0);
 
+                const isOfflineOrder = (o.orderType === 'Offline' || o.channel === 'Offline');
+
                 return `
                     <div style="background: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 12px; padding: 14px; position: relative;">
                         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">
                             <div>
-                                <h4 style="margin: 0; color: #0F172A; font-size: 1rem;">Order #${o.id}</h4>
+                                <h4 style="margin: 0; color: #0F172A; font-size: 1rem; display: flex; align-items: center; gap: 8px;">
+                                    Order #${o.id}
+                                    ${isOfflineOrder ? `
+                                        <span class="badge" style="background:#FEF3C7; color:#92400E; font-size: 0.72rem; padding: 2px 8px; border-radius: 12px;">
+                                            <i class="fa-solid fa-shop"></i> OFFLINE
+                                        </span>
+                                    ` : `
+                                        <span class="badge" style="background:#DBEAFE; color:#1E40AF; font-size: 0.72rem; padding: 2px 8px; border-radius: 12px;">
+                                            <i class="fa-solid fa-globe"></i> ONLINE
+                                        </span>
+                                    `}
+                                </h4>
                                 <span style="font-size: 0.82rem; color: #64748B;">Total: <strong style="color: #059669; font-size: 0.95rem;">₹${orderSubtotal.toFixed(2)}</strong> (${o.paymentMethod || (o.delivery ? o.delivery.payment : 'COD') || 'COD'})</span>
                             </div>
                             <span class="badge" style="background: ${o.status === 'Delivered' ? '#D1FAE5; color: #047857;' : o.status === 'Cancelled' ? '#FEE2E2; color: #B91C1C;' : '#FEF3C7; color: #B45309;'} font-weight: 700; padding: 4px 10px; border-radius: 20px; font-size: 0.78rem;">
@@ -3892,6 +3905,30 @@ function renderBookingTracking(searchQuery = '') {
                     <i class="fa-solid fa-triangle-exclamation text-danger"></i> ORDER CANCELLED
                 </div>
             ` : ''}
+
+            <!-- Online / Offline Order Channel Badge -->
+            <div style="margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                <div>
+                    ${(order.orderType === 'Offline' || order.channel === 'Offline') ? `
+                        <span class="badge" style="background: #FEF3C7; color: #92400E; font-weight: 700; padding: 4px 10px; border-radius: 20px; font-size: 0.78rem;">
+                            <i class="fa-solid fa-shop"></i> OFFLINE STORE ORDER
+                        </span>
+                    ` : `
+                        <span class="badge" style="background: #DBEAFE; color: #1E40AF; font-weight: 700; padding: 4px 10px; border-radius: 20px; font-size: 0.78rem;">
+                            <i class="fa-solid fa-globe"></i> ONLINE ORDER
+                        </span>
+                    `}
+                </div>
+                ${isAdminOrSupplier ? `
+                    <div style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem;">
+                        <span style="color: #64748B; font-weight: 600;">Mode:</span>
+                        <select onchange="updateOrderChannel('${order.id}', this.value)" style="padding: 2px 8px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.78rem; font-weight: 700; color: #1E293B;">
+                            <option value="Online" ${(order.orderType !== 'Offline' && order.channel !== 'Offline') ? 'selected' : ''}>🌐 Online</option>
+                            <option value="Offline" ${(order.orderType === 'Offline' || order.channel === 'Offline') ? 'selected' : ''}>🏪 Offline</option>
+                        </select>
+                    </div>
+                ` : ''}
+            </div>
 
             <div style="margin-bottom: 0.8rem; color: var(--text-dark); font-size: 0.85rem;">
                 <strong>Customer User ID:</strong> ${custUserId}
@@ -4683,6 +4720,231 @@ function renderDataAnalyticsDashboard() {
                     data: cats.map(c => categoryMap[c]),
                     backgroundColor: 'rgba(59, 130, 246, 0.7)',
                     borderColor: '#3B82F6',
+                    borderWidth: 1.5
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
+    }
+}
+
+/* ==========================================
+   Supplier Data Analytics Dashboard & Modes
+   ========================================== */
+let supplierStatusChartInstance = null;
+let supplierChannelChartInstance = null;
+let supplierProductChartInstance = null;
+
+window.updateOrderChannel = async function(orderId, newChannel) {
+    const order = state.ordersHistory.find(o => o.id === orderId);
+    if (order) {
+        order.orderType = newChannel;
+        order.channel = newChannel;
+        showToast(`Order #${orderId} marked as <strong>${newChannel}</strong>!`, 'success');
+        renderBookingTracking();
+        renderLiveNotificationsList();
+    }
+};
+
+window.openSupplierAnalyticsModal = async function() {
+    if (!state.currentUser) {
+        showToast('Please sign in as a Supplier to access your Analytics Dashboard', 'info');
+        return;
+    }
+    closeModals();
+    const overlay = document.getElementById('supplierAnalyticsOverlay');
+    const modal = document.getElementById('supplierAnalyticsModal');
+    if (overlay && modal) {
+        overlay.classList.add('active');
+        modal.classList.add('active');
+    }
+
+    await fetchOrdersFromAPI();
+    renderSupplierAnalyticsDashboard();
+};
+
+window.closeSupplierAnalyticsModal = function() {
+    closeModals();
+    if (document.fullscreenElement) {
+        try { document.exitFullscreen(); } catch(e){}
+    }
+};
+
+window.refreshSupplierAnalyticsCharts = async function() {
+    await fetchOrdersFromAPI();
+    renderSupplierAnalyticsDashboard();
+    showToast('📊 Supplier Analytics Dashboard Refreshed!', 'success');
+};
+
+window.toggleFullScreenSupplierAnalytics = function() {
+    const modal = document.getElementById('supplierAnalyticsModal');
+    const toggleBtn = document.getElementById('fullScreenSupplierToggleBtn');
+    if (!modal) return;
+
+    if (!document.fullscreenElement) {
+        if (modal.requestFullscreen) {
+            modal.requestFullscreen();
+        } else if (modal.webkitRequestFullscreen) {
+            modal.webkitRequestFullscreen();
+        }
+        if (toggleBtn) toggleBtn.innerHTML = '<i class="fa-solid fa-compress"></i> Exit Full Screen';
+    } else {
+        if (document.exitFullscreen) {
+            document.exitFullscreen();
+        }
+        if (toggleBtn) toggleBtn.innerHTML = '<i class="fa-solid fa-expand"></i> Full Screen';
+    }
+};
+
+function renderSupplierAnalyticsDashboard() {
+    if (!state.currentUser) return;
+    
+    // Filter orders to ONLY orders containing items from this supplier
+    const isSupplier = state.currentUser.role === 'supplier';
+    let supplierOrders = [...state.ordersHistory];
+    if (isSupplier) {
+        supplierOrders = supplierOrders.filter(o => (o.items || []).some(item => isItemFromSupplier(item)));
+    }
+
+    let totalRevenue = 0;
+    let completedCount = 0;
+    let pendingCount = 0;
+    let cancelledCount = 0;
+    let onlineCount = 0;
+    let offlineCount = 0;
+
+    const statusMap = { Placed: 0, Packing: 0, Shipped: 0, Delivered: 0, Cancelled: 0 };
+    const productMetricsMap = {};
+
+    supplierOrders.forEach(o => {
+        const st = o.status || 'Placed';
+        statusMap[st] = (statusMap[st] || 0) + 1;
+
+        if (st === 'Delivered') completedCount++;
+        else if (st === 'Cancelled') cancelledCount++;
+        else pendingCount++;
+
+        const isOffline = (o.orderType === 'Offline' || o.channel === 'Offline');
+        if (isOffline) offlineCount++;
+        else onlineCount++;
+
+        // Filter items to ONLY items supplied by this supplier
+        const items = isSupplier ? (o.items || []).filter(i => isItemFromSupplier(i)) : (o.items || []);
+
+        items.forEach(i => {
+            const pTitle = i.title || i.name || 'Kirana Product';
+            const qty = parseInt(i.qty || i.quantity || 1);
+            const price = parseFloat(i.price || 0);
+            const lineTotal = qty * price;
+
+            totalRevenue += lineTotal;
+
+            if (!productMetricsMap[pTitle]) {
+                productMetricsMap[pTitle] = {
+                    title: pTitle,
+                    category: i.category || 'Kirana Items',
+                    unitsSold: 0,
+                    completedOrders: 0,
+                    revenue: 0
+                };
+            }
+
+            productMetricsMap[pTitle].unitsSold += qty;
+            productMetricsMap[pTitle].revenue += lineTotal;
+            if (st === 'Delivered') productMetricsMap[pTitle].completedOrders += 1;
+        });
+    });
+
+    // Update KPI Elements
+    const revEl = document.getElementById('supplierStatRevenue');
+    const totOrdEl = document.getElementById('supplierStatTotalOrders');
+    const compOrdEl = document.getElementById('supplierStatCompletedOrders');
+    const cancOrdEl = document.getElementById('supplierStatCancelledOrders');
+    const chanEl = document.getElementById('supplierStatChannels');
+
+    if (revEl) revEl.textContent = `₹${totalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+    if (totOrdEl) totOrdEl.textContent = `${supplierOrders.length} Orders`;
+    if (compOrdEl) compOrdEl.textContent = `${completedCount} Completed (${supplierOrders.length ? Math.round((completedCount/supplierOrders.length)*100) : 0}%)`;
+    if (cancOrdEl) cancOrdEl.textContent = `${cancelledCount} Cancelled`;
+    if (chanEl) chanEl.textContent = `${onlineCount} Online / ${offlineCount} Offline`;
+
+    // Render Product Performance Table
+    const tableBody = document.getElementById('supplierProductTableBody');
+    if (tableBody) {
+        const sortedProducts = Object.values(productMetricsMap).sort((a,b) => b.revenue - a.revenue);
+        tableBody.innerHTML = sortedProducts.map(p => `
+            <tr style="border-bottom: 1px solid #E2E8F0;">
+                <td style="padding: 10px; font-weight: 700; color: #0F172A;">${p.title}</td>
+                <td style="padding: 10px; color: #475569;">${p.category}</td>
+                <td style="padding: 10px; color: #334155; font-weight: 600;">${p.unitsSold} units</td>
+                <td style="padding: 10px; color: #059669; font-weight: 600;">${p.completedOrders} orders</td>
+                <td style="padding: 10px; font-weight: 700; color: #047857;">₹${p.revenue.toFixed(2)}</td>
+            </tr>
+        `).join('') || '<tr><td colspan="5" style="padding: 14px; text-align: center; color: #64748B;">No product sales recorded yet for your supplier account.</td></tr>';
+    }
+
+    if (typeof Chart === 'undefined') return;
+
+    // 1. Status Breakdown Chart
+    const statusCanvas = document.getElementById('supplierStatusChartCanvas');
+    if (statusCanvas) {
+        if (supplierStatusChartInstance) supplierStatusChartInstance.destroy();
+        supplierStatusChartInstance = new Chart(statusCanvas, {
+            type: 'doughnut',
+            data: {
+                labels: ['Placed', 'Packing', 'Shipped', 'Delivered', 'Cancelled'],
+                datasets: [{
+                    data: [statusMap.Placed, statusMap.Packing, statusMap.Shipped, statusMap.Delivered, statusMap.Cancelled],
+                    backgroundColor: ['#F59E0B', '#3B82F6', '#8B5CF6', '#10B981', '#EF4444']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'right' } }
+            }
+        });
+    }
+
+    // 2. Online vs Offline Channel Chart
+    const channelCanvas = document.getElementById('supplierChannelChartCanvas');
+    if (channelCanvas) {
+        if (supplierChannelChartInstance) supplierChannelChartInstance.destroy();
+        supplierChannelChartInstance = new Chart(channelCanvas, {
+            type: 'pie',
+            data: {
+                labels: ['Online Orders (Web/App)', 'Offline Store Orders (POS)'],
+                datasets: [{
+                    data: [onlineCount, offlineCount],
+                    backgroundColor: ['#3B82F6', '#F59E0B']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom' } }
+            }
+        });
+    }
+
+    // 3. Product-Wise Performance Chart
+    const prodCanvas = document.getElementById('supplierProductChartCanvas');
+    if (prodCanvas) {
+        if (supplierProductChartInstance) supplierProductChartInstance.destroy();
+        const topProds = Object.values(productMetricsMap).sort((a,b) => b.unitsSold - a.unitsSold).slice(0, 7);
+        supplierProductChartInstance = new Chart(prodCanvas, {
+            type: 'bar',
+            data: {
+                labels: topProds.length ? topProds.map(p => p.title.length > 18 ? p.title.substring(0, 18) + '...' : p.title) : ['No Items'],
+                datasets: [{
+                    label: 'Units Sold',
+                    data: topProds.map(p => p.unitsSold),
+                    backgroundColor: 'rgba(2, 132, 199, 0.7)',
+                    borderColor: '#0284C7',
                     borderWidth: 1.5
                 }]
             },
