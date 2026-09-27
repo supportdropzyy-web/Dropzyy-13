@@ -1098,16 +1098,16 @@ def forgot_password_reset(payload: schemas.ForgotPasswordResetRequest, db: Sessi
 
 @app.post("/api/auth/register", response_model=schemas.UserResponse)
 def register_user(user_data: schemas.UserRegister, db: Session = Depends(get_db)):
-    email_clean = user_data.email.strip().lower()
-    if not email_clean or "@" not in email_clean:
-        raise HTTPException(status_code=400, detail="Invalid email address!")
+    email_raw = (user_data.email or "").strip().lower()
+    derived_username = (user_data.username or (email_raw.split("@")[0] if "@" in email_raw else "user_" + str(uuid.uuid4())[:6])).strip()
     
-    derived_username = user_data.username or email_clean.split("@")[0]
+    email_clean = email_raw if (email_raw and "@" in email_raw) else f"{derived_username.lower()}@freshkart.com"
+
     existing = db.query(models.User).filter(
         (models.User.email == email_clean) | (models.User.username == derived_username)
     ).first()
     if existing:
-        raise HTTPException(status_code=400, detail="An account with this email or username already exists!")
+        raise HTTPException(status_code=400, detail=f"An account with username '@{derived_username}' or email '{email_clean}' already exists!")
     
     assigned_role = user_data.role if user_data.role in ['customer', 'supplier', 'admin'] else 'customer'
     supplier_comp = user_data.supplier_company_name if assigned_role == "supplier" else None
