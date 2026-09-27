@@ -1,0 +1,20 @@
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment & Virtual Env
+.env
+.venv
+env/
+venv/
+
+# Database Files
+*.sqlite3
+freshkart.db
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
