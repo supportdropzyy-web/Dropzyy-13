@@ -103,13 +103,16 @@ class Location(Base):
     __tablename__ = "locations"
 
     id = Column(Integer, primary_key=True, index=True)
-    area = Column(String, nullable=False)
+    city = Column(String, nullable=True)
+    area = Column(String, nullable=True)
     pincode = Column(String, nullable=False)
+    delivery_time = Column(String, default="15 Mins")
 
 class Category(Base):
     __tablename__ = "categories"
 
-    id = Column(String, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String, unique=True, index=True, nullable=True)
     name = Column(String, nullable=False)
     icon = Column(String, nullable=True)
     created_by_supplier = Column(String, nullable=True)
