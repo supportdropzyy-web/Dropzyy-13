@@ -53,7 +53,6 @@ class Product(Base):
     description = Column(Text, nullable=True)
     nutrition = Column(Text, nullable=True)
     supplier_name = Column(String, default="FreshKart Direct Mandi") # e.g. 'Ramesh Kirana Wholesale Co.'
-    is_online = Column(Boolean, default=True)
     
     supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=True)
     supplier_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -101,29 +100,16 @@ class Coupon(Base):
     is_active = Column(Boolean, default=True)
 
 class Location(Base):
-    __tablename__ = "serviceable_locations"
+    __tablename__ = "locations"
 
     id = Column(Integer, primary_key=True, index=True)
-    city = Column(String, nullable=False)
-    pincode = Column(String, unique=True, index=True, nullable=False)
-    delivery_time = Column(String, default="15 Mins")
+    area = Column(String, nullable=False)
+    pincode = Column(String, nullable=False)
 
 class Category(Base):
     __tablename__ = "categories"
 
-    id = Column(Integer, primary_key=True, index=True)
-    code = Column(String, unique=True, index=True, nullable=False)
-    name = Column(String, nullable=False)
-    icon = Column(String, default="fa-solid fa-layer-group")
-
-class RefundClaim(Base):
-    __tablename__ = "refund_claims"
-
     id = Column(String, primary_key=True, index=True)
-    email = Column(String, index=True, nullable=False)
-    order_id = Column(String, index=True, nullable=False)
-    reason = Column(String, nullable=False)
-    upi_id = Column(String, nullable=True)
-    details = Column(Text, nullable=False)
-    status = Column(String, default="Pending")
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    name = Column(String, nullable=False)
+    icon = Column(String, nullable=True)
+    created_by_supplier = Column(String, nullable=True)
