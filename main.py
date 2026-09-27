@@ -1252,7 +1252,8 @@ def get_products(
                     description=p_desc,
                     nutrition=str(p.get("nutrition", "")),
                     supplier_name=str(p.get("supplier_name", "Dropzyy Direct")),
-                    supplier_id=int(p["supplier_id"]) if p.get("supplier_id") is not None else None
+                    supplier_id=int(p["supplier_id"]) if p.get("supplier_id") is not None else None,
+                    is_online=bool(p.get("is_online", True))
                 ))
             return res
 
@@ -1282,7 +1283,8 @@ def create_product(product_data: schemas.ProductCreate, db: Session = Depends(ge
         description=product_data.description,
         nutrition=product_data.nutrition,
         supplier_name=product_data.supplier_name or "Dropzyy Direct",
-        supplier_id=product_data.supplier_id
+        supplier_id=product_data.supplier_id,
+        is_online=product_data.is_online if product_data.is_online is not None else True
     )
     db.add(new_product)
     db.commit()
@@ -1302,7 +1304,8 @@ def create_product(product_data: schemas.ProductCreate, db: Session = Depends(ge
                 "discount": new_product.discount,
                 "description": new_product.description,
                 "nutrition": new_product.nutrition,
-                "supplier_name": new_product.supplier_name
+                "supplier_name": new_product.supplier_name,
+                "is_online": new_product.is_online
             })
             print(f"[MONGODB SYNC SUCCESS] Product '{new_product.title}' saved to MongoDB Atlas!")
         except Exception as m_err:
@@ -1326,7 +1329,8 @@ def update_product(product_id: str, product_data: schemas.ProductCreate, db: Ses
             "discount": product_data.discount,
             "description": product_data.description,
             "nutrition": product_data.nutrition,
-            "supplier_name": product_data.supplier_name
+            "supplier_name": product_data.supplier_name,
+            "is_online": product_data.is_online if product_data.is_online is not None else True
         })
 
     product = db.query(models.Product).filter(models.Product.id == product_id).first()
@@ -1342,6 +1346,8 @@ def update_product(product_id: str, product_data: schemas.ProductCreate, db: Ses
         product.description = product_data.description
         product.nutrition = product_data.nutrition
         product.supplier_name = product_data.supplier_name or product.supplier_name
+        if product_data.is_online is not None:
+            product.is_online = product_data.is_online
         db.commit()
         db.refresh(product)
         return product
