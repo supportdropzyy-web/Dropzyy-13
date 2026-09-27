@@ -3177,47 +3177,174 @@ function showToast(message, type = 'success') {
 
 // 18. MY ORDERS & LIVE ORDER AUDIO RINGING LOGIC
 let knownOrderIds = new Set();
+let unreadOrdersList = [];
 let isOrderSoundEnabled = true;
+let alarmRingInterval = null;
+let activeOscillators = [];
 
 window.playOrderAlertRing = function() {
     if (!isOrderSoundEnabled) return;
+    
+    // Stop any existing ringing sequence
+    stopOrderAlertRing();
+
     try {
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         if (!AudioContext) return;
         const ctx = new AudioContext();
 
-        const notes = [659.25, 783.99, 1046.50, 659.25, 1046.50];
-        notes.forEach((freq, idx) => {
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
+        let elapsed = 0;
 
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.18);
+        // Function for 1 ring burst chime
+        const triggerChime = () => {
+            const notes = [783.99, 1046.50, 783.99, 1046.50, 1318.51];
+            notes.forEach((freq, idx) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
 
-            gain.gain.setValueAtTime(0, ctx.currentTime + idx * 0.18);
-            gain.gain.linearRampToValueAtTime(0.8, ctx.currentTime + idx * 0.18 + 0.02);
-            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.18 + 0.4);
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.12);
 
-            osc.connect(gain);
-            gain.connect(ctx.destination);
+                gain.gain.setValueAtTime(0, ctx.currentTime + idx * 0.12);
+                gain.gain.linearRampToValueAtTime(0.9, ctx.currentTime + idx * 0.12 + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.12 + 0.35);
 
-            osc.start(ctx.currentTime + idx * 0.18);
-            osc.stop(ctx.currentTime + idx * 0.18 + 0.45);
-        });
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+
+                osc.start(ctx.currentTime + idx * 0.12);
+                osc.stop(ctx.currentTime + idx * 0.12 + 0.4);
+                activeOscillators.push(osc);
+            });
+        };
+
+        // Trigger immediate 1st ring
+        triggerChime();
+
+        // Repeat ringing every 1.2 seconds for 10 SECONDS total (~8 ring bursts)
+        alarmRingInterval = setInterval(() => {
+            elapsed += 1.2;
+            if (elapsed >= 10.5) {
+                stopOrderAlertRing();
+                return;
+            }
+            triggerChime();
+        }, 1200);
+
     } catch (err) {
         console.warn('Audio ring playback notice:', err);
     }
+};
+
+window.stopOrderAlertRing = function() {
+    if (alarmRingInterval) {
+        clearInterval(alarmRingInterval);
+        alarmRingInterval = null;
+    }
+    activeOscillators.forEach(osc => { try { osc.stop(); } catch(e){} });
+    activeOscillators = [];
 };
 
 window.toggleOrderSoundAlert = function() {
     isOrderSoundEnabled = !isOrderSoundEnabled;
     if (isOrderSoundEnabled) {
         playOrderAlertRing();
-        showToast('🔔 Live Order Audio Alert Ringing: ON', 'success');
+        showToast('🔔 Live 10-Sec Order Audio Alert: ON', 'success');
     } else {
-        showToast('🔕 Live Order Audio Alert Ringing: OFF', 'info');
+        stopOrderAlertRing();
+        showToast('🔕 Live Order Audio Alert: OFF', 'info');
     }
 };
+
+window.updateNotificationBadgeUI = function() {
+    const badge = document.getElementById('liveNotificationBadge');
+    const modalBadge = document.getElementById('notificationModalCountBadge');
+    const count = unreadOrdersList.length;
+
+    if (badge) {
+        if (count > 0) {
+            badge.textContent = count;
+            badge.classList.remove('hidden');
+        } else {
+            badge.classList.add('hidden');
+        }
+    }
+
+    if (modalBadge) {
+        modalBadge.textContent = `${count} New`;
+    }
+};
+
+window.openLiveNotificationModal = function() {
+    closeModals();
+    stopOrderAlertRing(); // Stop 10-second alarm sound when clicked!
+
+    const overlay = document.getElementById('liveNotificationOverlay');
+    const modal = document.getElementById('liveNotificationModal');
+    if (overlay && modal) {
+        overlay.classList.add('active');
+        modal.classList.add('active');
+    }
+
+    renderLiveNotificationsList();
+
+    // Clear unread count badge on open
+    unreadOrdersList = [];
+    updateNotificationBadgeUI();
+};
+
+window.closeLiveNotificationModal = function() {
+    closeModals();
+    stopOrderAlertRing();
+};
+
+function renderLiveNotificationsList() {
+    const container = document.getElementById('liveNotificationsList');
+    if (!container) return;
+
+    const allOrders = [...state.ordersHistory];
+    if (allOrders.length === 0) {
+        container.innerHTML = '<div style="padding: 24px; text-align: center; color: #64748B;"><i class="fa-solid fa-bell-slash" style="font-size: 2rem; margin-bottom: 8px; color: #CBD5E1; display: block;"></i> No incoming orders yet.</div>';
+        return;
+    }
+
+    container.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+            ${allOrders.map(o => {
+                const cName = (o.delivery && o.delivery.name) || o.customerName || 'Customer';
+                const cPhone = (o.delivery && o.delivery.phone) || 'N/A';
+                const cAddr = (o.delivery && o.delivery.address) || 'N/A';
+                const itemsStr = (o.items || []).map(i => `${i.title || i.name} (x${i.qty || i.quantity || 1})`).join(', ');
+
+                return `
+                    <div style="background: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 12px; padding: 14px; position: relative;">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">
+                            <div>
+                                <h4 style="margin: 0; color: #0F172A; font-size: 1rem;">Order #${o.id}</h4>
+                                <span style="font-size: 0.82rem; color: #64748B;">Total: <strong style="color: #059669; font-size: 0.95rem;">₹${o.total}</strong> (${o.paymentMethod || 'COD'})</span>
+                            </div>
+                            <span class="badge" style="background: ${o.status === 'Delivered' ? '#D1FAE5; color: #047857;' : o.status === 'Cancelled' ? '#FEE2E2; color: #B91C1C;' : '#FEF3C7; color: #B45309;'} font-weight: 700; padding: 4px 10px; border-radius: 20px; font-size: 0.78rem;">
+                                ${o.status || 'Placed'}
+                            </span>
+                        </div>
+
+                        <div style="font-size: 0.82rem; color: #334155; margin-bottom: 8px; display: flex; flex-direction: column; gap: 4px;">
+                            <div><i class="fa-solid fa-user text-primary"></i> <strong>Customer:</strong> ${cName} (${cPhone})</div>
+                            <div><i class="fa-solid fa-location-dot text-danger"></i> <strong>Address:</strong> ${cAddr}</div>
+                            <div><i class="fa-solid fa-cart-flatbed text-success"></i> <strong>Items:</strong> ${itemsStr || 'Kirana items'}</div>
+                        </div>
+
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                            <button class="btn btn-primary btn-sm" onclick="closeLiveNotificationModal(); openBookingTrackingModal();">
+                                <i class="fa-solid fa-map-location-dot"></i> Track / Update Status
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+}
 
 async function fetchOrdersFromAPI() {
     try {
@@ -3229,15 +3356,12 @@ async function fetchOrdersFromAPI() {
         if (res && res.ok) {
             const apiOrders = await res.json();
             if (Array.isArray(apiOrders)) {
-                let hasNewOrder = false;
-                let newOrderDetails = null;
+                let newOrdersFound = [];
 
                 if (knownOrderIds.size > 0) {
                     for (const o of apiOrders) {
                         if (o.id && !knownOrderIds.has(String(o.id))) {
-                            hasNewOrder = true;
-                            newOrderDetails = o;
-                            break;
+                            newOrdersFound.push(o);
                         }
                     }
                 }
@@ -3246,10 +3370,20 @@ async function fetchOrdersFromAPI() {
 
                 state.ordersHistory = apiOrders;
 
-                if (hasNewOrder && newOrderDetails) {
-                    playOrderAlertRing();
-                    const custName = (newOrderDetails.delivery && newOrderDetails.delivery.name) || newOrderDetails.customerName || 'Customer';
-                    showToast(`🚨 <strong>NEW LIVE ORDER RECEIVED!</strong><br>Order ID: #${newOrderDetails.id} (₹${newOrderDetails.total}) - ${custName}`, 'success');
+                if (newOrdersFound.length > 0) {
+                    // Push all newly discovered orders to unread list
+                    newOrdersFound.forEach(no => {
+                        if (!unreadOrdersList.some(u => String(u.id) === String(no.id))) {
+                            unreadOrdersList.unshift(no);
+                        }
+                    });
+
+                    updateNotificationBadgeUI();
+                    playOrderAlertRing(); // 10-second loud alarm ring!
+
+                    const latestOrder = newOrdersFound[0];
+                    const custName = (latestOrder.delivery && latestOrder.delivery.name) || latestOrder.customerName || 'Customer';
+                    showToast(`🚨 <strong>${newOrdersFound.length} NEW LIVE ORDER(S) RECEIVED!</strong><br>Latest Order: #${latestOrder.id} (₹${latestOrder.total}) - ${custName}`, 'success');
 
                     if (typeof bookingTrackingContainer !== 'undefined' && bookingTrackingContainer) {
                         renderBookingTracking();
