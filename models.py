@@ -53,6 +53,7 @@ class Product(Base):
     description = Column(Text, nullable=True)
     nutrition = Column(Text, nullable=True)
     supplier_name = Column(String, default="FreshKart Direct Mandi") # e.g. 'Ramesh Kirana Wholesale Co.'
+    is_online = Column(Boolean, default=True)
     
     supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=True)
     supplier_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
