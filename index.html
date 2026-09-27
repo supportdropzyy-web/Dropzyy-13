@@ -855,6 +855,13 @@
                     <label for="prodBadge">Quality Badge</label>
                     <input type="text" id="prodBadge" placeholder="e.g. 100% Pure or Mandi Fresh">
                 </div>
+                <div class="form-group">
+                    <label for="prodStatus"><i class="fa-solid fa-globe text-primary"></i> Website Visibility Mode</label>
+                    <select id="prodStatus" class="sort-dropdown" style="padding: 10px;">
+                        <option value="online">🟢 Online (Visible to Website Customers)</option>
+                        <option value="offline">🔴 Offline (Taken off Website)</option>
+                    </select>
+                </div>
                 <div class="form-group full-width">
                     <label for="prodSupplierName"><i class="fa-solid fa-truck-field text-primary"></i> Supplier / Brand Name</label>
                     <input type="text" id="prodSupplierName" placeholder="e.g. Ramesh Kirana Wholesale Co. or Amul Anand Dairy">
@@ -1342,12 +1349,45 @@
 
                 <div style="background: linear-gradient(135deg, #F3E8FF, #E9D5FF); border: 1px solid #DDD6FE; padding: 16px; border-radius: 14px;">
                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
-                        <span style="font-size: 0.8rem; font-weight: 700; color: #6B21A8;">ONLINE VS OFFLINE</span>
-                        <i class="fa-solid fa-globe" style="color: #9333EA; font-size: 1.1rem;"></i>
+                        <span style="font-size: 0.8rem; font-weight: 700; color: #6B21A8;">STORE AVAILABILITY</span>
+                        <i class="fa-solid fa-clock" style="color: #9333EA; font-size: 1.1rem;"></i>
                     </div>
-                    <div id="supplierStatChannels" style="font-size: 1.15rem; font-weight: 800; color: #581C87;">0 Online / 0 Offline</div>
-                    <span style="font-size: 0.72rem; color: #7E22CE; font-weight: 600;">Sales Channel Split</span>
+                    <div id="supplierStatStoreStatus" style="font-size: 1.15rem; font-weight: 800; color: #047857;">🟢 OPEN (08:00 - 22:00)</div>
+                    <span style="font-size: 0.72rem; color: #7E22CE; font-weight: 600;">Daily Operating Hours</span>
                 </div>
+            </div>
+
+            <!-- Supplier Business Hours & Store Open/Closed Control Panel -->
+            <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 16px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+                <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; border-bottom: 1px solid #F1F5F9; padding-bottom: 12px; margin-bottom: 12px;">
+                    <div>
+                        <h4 style="margin: 0; font-size: 1rem; color: #0F172A; display: flex; align-items: center; gap: 8px;">
+                            <i class="fa-solid fa-clock text-primary"></i> Store Business Hours & Availability
+                        </h4>
+                        <p style="margin: 2px 0 0 0; font-size: 0.8rem; color: #64748B;">Set daily opening/closing timings and toggle your store status (Open / Closed)</p>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span id="supplierStoreStatusBadge" class="badge" style="background:#D1FAE5; color:#047857; font-weight:700; padding: 6px 12px; border-radius: 20px; font-size: 0.85rem;">
+                            🟢 STORE OPEN
+                        </span>
+                        <button type="button" class="btn btn-sm btn-secondary" id="toggleStoreStatusBtn" onclick="toggleSupplierStoreOpenStatus()">
+                            Toggle Closed 🔴
+                        </button>
+                    </div>
+                </div>
+                <form id="supplierTimingsForm" onsubmit="saveSupplierTimingsSubmit(event)" style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <label style="font-size: 0.82rem; font-weight: 600; color: #334155;">Opening Time:</label>
+                        <input type="time" id="supplierOpenTimeInput" value="08:00" style="padding: 6px 10px; border-radius: 8px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <label style="font-size: 0.82rem; font-weight: 600; color: #334155;">Closing Time:</label>
+                        <input type="time" id="supplierCloseTimeInput" value="22:00" style="padding: 6px 10px; border-radius: 8px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm">
+                        <i class="fa-solid fa-floppy-disk"></i> Save Timings
+                    </button>
+                </form>
             </div>
 
             <!-- Charts Grid -->
@@ -1365,20 +1405,7 @@
                     </div>
                 </div>
 
-                <!-- Chart 2: Online vs Offline Channels -->
-                <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
-                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-                        <h4 style="margin: 0; font-size: 0.95rem; color: #0F172A; display: flex; align-items: center; gap: 6px;">
-                            <i class="fa-solid fa-shop text-primary"></i> Online vs Offline Order Modes
-                        </h4>
-                        <span style="font-size: 0.75rem; color: #64748B;">Sales Channel</span>
-                    </div>
-                    <div style="height: 240px; position: relative;">
-                        <canvas id="supplierChannelChartCanvas"></canvas>
-                    </div>
-                </div>
-
-                <!-- Chart 3: Top Products Sold -->
+                <!-- Chart 2: Top Products Sold -->
                 <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
                         <h4 style="margin: 0; font-size: 0.95rem; color: #0F172A; display: flex; align-items: center; gap: 6px;">
