@@ -21,8 +21,8 @@ class ForgotPasswordResetRequest(BaseModel):
     new_password: str
 
 class UserRegister(BaseModel):
-    email: str
-    otp: str
+    email: Optional[str] = None
+    otp: Optional[str] = None
     password: str
     full_name: str
     phone: Optional[str] = None
