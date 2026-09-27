@@ -734,11 +734,10 @@ function renderProducts() {
         emptyState.classList.add('hidden');
     }
 
-    const isAdminOrSupplier = state.currentUser && (state.currentUser.role === 'admin' || state.currentUser.role === 'sub_admin' || state.currentUser.role === 'supplier');
-
     productGrid.innerHTML = filtered.map(product => {
         const isWishlisted = state.wishlist.has(String(product.id));
         const sName = product.supplierName || 'Dropzyy Direct';
+        const canEdit = canUserEditProduct(product);
 
         return `
             <div class="product-card" data-id="${product.id}">
@@ -747,11 +746,11 @@ function renderProducts() {
                     <span class="product-badge badge-discount">${product.discount}</span>
                 </div>
 
-                ${isAdminOrSupplier ? `
-                    <button class="edit-prod-btn" onclick="openEditProductModal('${product.id}')" title="Edit Product (Admin/Supplier)">
+                ${canEdit ? `
+                    <button class="edit-prod-btn" onclick="openEditProductModal('${product.id}')" title="Edit Product">
                         <i class="fa-solid fa-pen-to-square"></i>
                     </button>
-                    <button class="delete-prod-btn" onclick="deleteProduct('${product.id}')" title="Delete Product (Admin/Supplier)">
+                    <button class="delete-prod-btn" onclick="deleteProduct('${product.id}')" title="Delete Product">
                         <i class="fa-solid fa-trash"></i>
                     </button>
                 ` : ''}
@@ -1995,20 +1994,67 @@ async function createAccountByAdmin(username, password, fullName, role, supplier
 }
 
 // 10. SUPPLIER DASHBOARD
+// 10. SUPPLIER DASHBOARD & PRODUCT PERMISSIONS
+window.canUserEditProduct = function(product) {
+    if (!state.currentUser || !product) return false;
+    const role = state.currentUser.role;
+    // Admins and Sub-admins can edit/delete all products
+    if (role === 'admin' || role === 'sub_admin') return true;
+    
+    // Suppliers can ONLY edit/delete products belonging to them
+    if (role === 'supplier') {
+        if (state.currentUser.supplier_id && product.supplier_id && String(product.supplier_id) === String(state.currentUser.supplier_id)) {
+            return true;
+        }
+        if (state.currentUser.id && product.supplier_user_id && String(product.supplier_user_id) === String(state.currentUser.id)) {
+            return true;
+        }
+
+        const pSupplier = (product.supplierName || product.supplier_name || '').trim().toLowerCase();
+        if (!pSupplier) return false;
+
+        const myCompany = (state.currentUser.supplier_company_name || '').trim().toLowerCase();
+        const myName = (state.currentUser.full_name || '').trim().toLowerCase();
+        const myUser = (state.currentUser.username || '').trim().toLowerCase();
+
+        if (myCompany && (pSupplier === myCompany || pSupplier.includes(myCompany) || myCompany.includes(pSupplier))) return true;
+        if (myName && (pSupplier === myName || pSupplier.includes(myName) || myName.includes(pSupplier))) return true;
+        if (myUser && (pSupplier === myUser || pSupplier.includes(myUser) || myUser.includes(pSupplier))) return true;
+
+        return false;
+    }
+
+    return false;
+};
+
 function openSupplierDashboard() {
     if (!state.currentUser) return;
+    renderSupplierDashboard();
+}
 
-    const companyName = state.currentUser.supplier_company_name || state.currentUser.full_name;
-    supplierCompanyTitle.textContent = `Logged in as Special Supplier: ${companyName}`;
+function renderSupplierDashboard() {
+    if (!state.currentUser) return;
 
-    statTotalProducts.textContent = state.products.length;
-    const totalVal = state.products.reduce((sum, p) => sum + p.price, 0);
+    const companyName = state.currentUser.supplier_company_name || state.currentUser.full_name || state.currentUser.username;
+    const isSystemAdmin = state.currentUser.role === 'admin' || state.currentUser.role === 'sub_admin';
+
+    supplierCompanyTitle.textContent = isSystemAdmin 
+        ? `Logged in as System Admin: Viewing All Supplier Products` 
+        : `Logged in as Supplier: ${companyName}`;
+
+    // Filter catalog: Suppliers ONLY see their own products, Admin sees all
+    const supplierProducts = isSystemAdmin 
+        ? state.products 
+        : state.products.filter(p => canUserEditProduct(p));
+
+    statTotalProducts.textContent = supplierProducts.length;
+    const totalVal = supplierProducts.reduce((sum, p) => sum + (p.price || 0), 0);
     statCatalogValue.textContent = `₹${totalVal.toLocaleString()}`;
 
-    if (state.products.length === 0) {
-        supplierProductsContainer.innerHTML = `<p style="text-align: center; color: var(--text-muted); padding: 20px;">No products added yet.</p>`;
+    if (supplierProducts.length === 0) {
+        supplierProductsContainer.innerHTML = `<p style="text-align: center; color: var(--text-muted); padding: 30px;">No products added yet by your supplier account. Click <strong>+ Add New Product</strong> above to add your Kirana items!</p>`;
     } else {
-        supplierProductsContainer.innerHTML = state.products.map(p => `
+        supplierProductsContainer.innerHTML = supplierProducts.map(p => `
             <div class="supplier-item-row">
                 <img src="${p.image}" alt="${p.title}" class="supplier-item-thumb">
                 <div class="supplier-item-info">
@@ -2037,17 +2083,24 @@ function openSupplierDashboard() {
 // 11. ADMIN / SUPPLIER PRODUCT CREATE & EDIT
 window.openAddProductModal = function() {
     closeModals();
+    populateCategoryDropdowns();
     if (editProductId) editProductId.value = '';
     if (adminModalTitle) adminModalTitle.innerHTML = `<i class="fa-solid fa-plus-circle text-primary"></i> Add Kirana Product`;
     if (adminModalSub) adminModalSub.textContent = `Add a new product to the Kirana store database`;
     if (addProductForm) addProductForm.reset();
 
-    // Default supplier name to logged-in supplier's business name
-    if (state.currentUser && state.currentUser.role === 'supplier') {
-        const defaultSupplier = state.currentUser.supplier_company_name || state.currentUser.full_name;
-        if (document.getElementById('prodSupplierName')) document.getElementById('prodSupplierName').value = defaultSupplier;
-    } else {
-        if (document.getElementById('prodSupplierName')) document.getElementById('prodSupplierName').value = 'Dropzyy Direct';
+    const supplierInput = document.getElementById('prodSupplierName');
+    if (supplierInput) {
+        if (state.currentUser && state.currentUser.role === 'supplier') {
+            const defaultSupplier = state.currentUser.supplier_company_name || state.currentUser.full_name || state.currentUser.username;
+            supplierInput.value = defaultSupplier;
+            supplierInput.readOnly = true;
+            supplierInput.title = "Supplier name is set to your registered business name";
+        } else {
+            supplierInput.value = 'Dropzyy Direct';
+            supplierInput.readOnly = false;
+            supplierInput.title = "";
+        }
     }
 
     if (adminOverlay) adminOverlay.classList.add('active');
@@ -2058,7 +2111,13 @@ window.openEditProductModal = function(productId) {
     const product = state.products.find(p => p.id === productId);
     if (!product) return;
 
+    if (!canUserEditProduct(product)) {
+        showToast('Permission Denied: You can only edit products added by your supplier account.', 'error');
+        return;
+    }
+
     closeModals();
+    populateCategoryDropdowns();
 
     if (editProductId) editProductId.value = product.id;
     if (adminModalTitle) adminModalTitle.innerHTML = `<i class="fa-solid fa-pen-to-square text-primary"></i> Edit Kirana Product`;
@@ -2070,7 +2129,17 @@ window.openEditProductModal = function(productId) {
     if (document.getElementById('prodOriginalPrice')) document.getElementById('prodOriginalPrice').value = product.originalPrice;
     if (document.getElementById('prodUnit')) document.getElementById('prodUnit').value = product.unit;
     if (document.getElementById('prodBadge')) document.getElementById('prodBadge').value = product.badge;
-    if (document.getElementById('prodSupplierName')) document.getElementById('prodSupplierName').value = product.supplierName || 'Dropzyy Direct';
+
+    const supplierInput = document.getElementById('prodSupplierName');
+    if (supplierInput) {
+        supplierInput.value = product.supplierName || 'Dropzyy Direct';
+        if (state.currentUser && state.currentUser.role === 'supplier') {
+            supplierInput.readOnly = true;
+        } else {
+            supplierInput.readOnly = false;
+        }
+    }
+
     if (document.getElementById('prodImage')) document.getElementById('prodImage').value = product.image;
     if (document.getElementById('prodDesc')) document.getElementById('prodDesc').value = product.description || '';
 
@@ -2079,19 +2148,27 @@ window.openEditProductModal = function(productId) {
 };
 
 window.deleteProduct = async function(productId) {
-    if (!confirm('Are you sure you want to delete this product?')) return;
+    const product = state.products.find(p => p.id === productId);
+    if (!product) return;
+
+    if (!canUserEditProduct(product)) {
+        showToast('Permission Denied: You can only delete products added by your supplier account.', 'error');
+        return;
+    }
+
+    if (!confirm(`Are you sure you want to delete "${product.title}"?`)) return;
 
     state.products = state.products.filter(p => p.id !== productId);
     renderProducts();
 
     if (document.getElementById('supplierDashboardModal') && document.getElementById('supplierDashboardModal').classList.contains('active')) {
-        openSupplierDashboard();
+        renderSupplierDashboard();
     }
 
     try {
         const res = await fetchWithTimeout(`${API_BASE_URL}/products/${productId}`, { method: 'DELETE' }, 15000);
         if (res && res.ok) {
-            showToast('Product removed from MongoDB database!', 'info');
+            showToast(`Product '${product.title}' removed from database!`, 'info');
         } else {
             showToast('Product removed locally', 'info');
         }
@@ -3902,16 +3979,16 @@ window.selectSuggestion = function(productId) {
 /* ==========================================
    Category Management (Admin Feature)
    ========================================== */
-function populateCategoryDropdowns() {
+window.populateCategoryDropdowns = function() {
     const select = document.getElementById('prodCategory');
     if (!select) return;
     const activeCats = CATEGORIES.filter(c => c.id !== 'all');
     select.innerHTML = activeCats.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-}
+};
 
-function openAdminCategoriesModal() {
+window.openAdminCategoriesModal = function() {
     closeModals();
-    populateCategoryDropdowns();
+    window.populateCategoryDropdowns();
     renderAdminCategoriesList();
     const modal = document.getElementById('adminCategoriesModal');
     const overlay = document.getElementById('adminCategoriesOverlay');
@@ -3919,7 +3996,7 @@ function openAdminCategoriesModal() {
         modal.classList.add('active');
         overlay.classList.add('active');
     }
-}
+};
 
 function renderAdminCategoriesList() {
     const container = document.getElementById('adminCategoriesListContainer');
@@ -3942,7 +4019,7 @@ function renderAdminCategoriesList() {
     `).join('');
 }
 
-function handleAddCategorySubmit(e) {
+window.handleAddCategorySubmit = function(e) {
     e.preventDefault();
     const idInput = document.getElementById('newCatId');
     const nameInput = document.getElementById('newCatName');
@@ -3967,25 +4044,25 @@ function handleAddCategorySubmit(e) {
     syncAddCategoryToDB(catId, catName, catIcon);
     renderCategories();
     renderCategoryPills();
-    populateCategoryDropdowns();
+    window.populateCategoryDropdowns();
     renderAdminCategoriesList();
 
     idInput.value = '';
     nameInput.value = '';
     showToast(`Category '<strong>${catName}</strong>' added successfully!`, 'success');
-}
+};
 
-function deleteCategory(catId) {
+window.deleteCategory = function(catId) {
     customCategories = customCategories.filter(c => c.id !== catId);
     localStorage.setItem('dropzyy_custom_categories', JSON.stringify(customCategories));
     CATEGORIES = CATEGORIES.filter(c => c.id !== catId);
     syncDeleteCategoryFromDB(catId);
     renderCategories();
     renderCategoryPills();
-    populateCategoryDropdowns();
+    window.populateCategoryDropdowns();
     renderAdminCategoriesList();
     showToast('Category deleted', 'success');
-}
+};
 
 function renderCategoryPills() {
     const pillsContainer = document.getElementById('categoryPills');
