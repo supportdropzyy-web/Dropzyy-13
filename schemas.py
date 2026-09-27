@@ -90,7 +90,6 @@ class ProductCreate(BaseModel):
     nutrition: Optional[str] = ""
     supplier_name: Optional[str] = "FreshKart Direct Mandi"
     supplier_id: Optional[int] = None
-    is_online: Optional[bool] = True
 
 class ProductResponse(BaseModel):
     id: str
@@ -108,7 +107,6 @@ class ProductResponse(BaseModel):
     nutrition: Optional[str]
     supplier_name: Optional[str] = "FreshKart Direct Mandi"
     supplier_id: Optional[int]
-    is_online: Optional[bool] = True
 
     class Config:
         from_attributes = True
